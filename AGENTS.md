@@ -33,6 +33,7 @@ Demo credentials:
 | ORM | Prisma v7 | Requires `@prisma/adapter-pg` — PrismaClient needs `{ adapter }` constructor arg |
 | DB | PostgreSQL 16 | Docker Compose, port 5433 (host 5432 already in use) |
 | Seed scripts | tsx | `prisma/seed.ts` (minimal), `prisma/seed-demo.ts` (full demo data) |
+| Testing | Vitest | `npm test` to run, `npm run test:watch` for watch mode |
 
 ## Prisma v7 Gotchas
 
@@ -54,24 +55,31 @@ src/
 │   ├── register/page.tsx           # Registration with invite code
 │   ├── (app)/                      # Auth-protected route group
 │   │   ├── layout.tsx              # Checks session, redirects if not logged in, renders Navbar
-│   │   ├── picks/page.tsx          # Main pick page — week selector, team grid, pick history
-│   │   ├── leaderboard/page.tsx    # Player standings + team trophy tab
+│   │   ├── picks/page.tsx          # Main pick page — week dropdown, team grid, pick history, live polling
+│   │   ├── leaderboard/page.tsx    # Player standings + team trophy tab (respects pick visibility)
 │   │   ├── settings/page.tsx       # Profile, password change, team management
-│   │   └── admin/page.tsx          # Season creation, invite code generation (ADMIN only)
+│   │   └── admin/page.tsx          # Season creation, invite codes, schedule import, score sync (ADMIN only)
 │   └── api/
 │       ├── auth/[...nextauth]/     # NextAuth handler
 │       ├── auth/register/          # POST — invite-gated registration
 │       ├── picks/                  # GET season+picks, POST submit/change pick
-│       ├── leaderboard/            # GET player standings + team trophy
+│       ├── leaderboard/            # GET player standings + team trophy (filters picks by visibility)
+│       ├── scores/sync/            # POST — fetch live scores from ESPN, update games, auto-grade picks
 │       ├── settings/               # GET profile, PATCH update name/password
 │       ├── teams/                  # GET list, POST create/join/leave
 │       └── admin/
+│           ├── import-schedule/    # POST — import NFL schedule from ESPN for a season week (admin only)
 │           ├── invites/            # GET/POST invite codes (admin only)
 │           └── season/             # GET/POST seasons (admin only)
 ├── components/
 │   └── navbar.tsx                  # Responsive nav with mobile hamburger menu
+├── __tests__/
+│   ├── nfl-teams.test.ts           # NFL team data integrity tests
+│   ├── espn.test.ts                # ESPN API helper tests
+│   └── pick-logic.test.ts          # Kickoff locking, visibility, grading, point values
 └── lib/
     ├── auth.ts                     # NextAuth config (credentials provider, JWT callbacks)
+    ├── espn.ts                     # ESPN API helpers: team abbr mapping, URL builder, response types
     ├── types.ts                    # NextAuth session/JWT type augmentation
     ├── prisma.ts                   # Singleton PrismaClient with PrismaPg adapter
     └── nfl-teams.ts                # All 32 NFL teams with abbreviations, names, conference, division
@@ -110,10 +118,14 @@ Team ── User[] (members, for team trophy standings)
 
 - **Dark theme** — gray-950/900/800 backgrounds, consistent across all pages
 - **Mobile-first responsive** — hamburger nav, card layouts on mobile, tables on desktop
-- **Week selector** — horizontal scrollable pills, color-coded by pick result (green=win, red=loss, blue=selected)
+- **Week selector** — dropdown `<select>` with status indicators (checkmark=win, X=loss, bullet=pending)
 - **Admin role** — only admins see the Admin nav link; API routes check `session.user.role === "ADMIN"`
 - **Invite-only** — registration requires an invite code; admins generate them from the admin panel
 - **Season creation** auto-generates all 22 weeks (18 regular + 4 playoff) with correct point values
+- **Pick visibility** — other users' picks are hidden until the picked team's game kicks off. Admins see all picks. Users always see their own. This is enforced in the leaderboard API, not via a DB setting.
+- **ESPN integration** — uses ESPN's public scoreboard API (`site.api.espn.com`). Team abbreviation mapping in `src/lib/espn.ts` (ESPN uses "WSH", we use "WAS"). Games are matched via `externalId` (ESPN event ID) stored on the Game model.
+- **Live score polling** — picks page auto-polls every 30s when games are live/started. Calls `/api/scores/sync` (rate-limited to 1 call per 30s globally) then re-fetches picks data. The sync endpoint is accessible to any authenticated user.
+- **Auto-grading** — when the score sync detects a game transition to FINAL, it determines the winner and sets all PENDING picks for that game to WIN/LOSS with points based on `week.pointValue`.
 
 ## What's Done
 
@@ -127,16 +139,33 @@ Team ── User[] (members, for team trophy standings)
 - [x] Admin panel (season creation, invite codes)
 - [x] Mobile-responsive UI across all pages
 - [x] Demo seed data (10 players, 3 teams, 3 completed weeks, 1 upcoming week)
+- [x] Week selector changed to dropdown (was horizontal scrollable pills)
+- [x] Pick visibility — other users' picks hidden until their game kicks off; admins see all
+- [x] NFL schedule import — admin can import from ESPN by week or all at once
+- [x] Live score syncing — fetches from ESPN, updates game scores/status in real time
+- [x] Auto-grade picks — picks graded automatically when games go FINAL
+- [x] Client-side live polling — picks page polls every 30s during active game windows
+- [x] Vitest test suite — 28 tests covering NFL teams, ESPN helpers, pick locking, visibility, grading
 
 ## What Still Needs to Be Done
 
-- [ ] **Live game data integration** — pull real NFL scores from an API (ESPN unofficial API or similar). Need a service that fetches game schedules at season start and polls scores during game days.
-- [ ] **Auto-grade picks** — background job/cron that checks completed games and sets pick results (WIN/LOSS) and awards points based on the week's `pointValue`. Currently picks are only graded in the demo seed.
-- [ ] **Real NFL schedule import** — admin tool or script to import actual NFL schedules for a season (game times, teams, matchups) rather than manually creating them.
 - [ ] **Password reset** — currently no way to recover a forgotten password. Could add email or admin-reset flow.
 - [ ] **Notifications** — remind users to make their pick before kickoff (email, push, or in-app).
-- [ ] **Pick visibility** — decide if/when other users' picks should be visible (e.g., hidden until all games kick off, or always visible on leaderboard).
 - [ ] **Season history** — view past seasons' results, not just the active one.
 - [ ] **Deployment** — self-hosted initially; Docker Compose for production with nginx reverse proxy, or move to a managed platform.
 - [ ] **NEXTAUTH_SECRET** — generate a real secret for production (`openssl rand -base64 32`).
-- [ ] **Tests** — no test suite yet.
+- [ ] **Tie handling** — score sync currently picks the home team as winner on ties. NFL regular season games can't tie (overtime rules), but worth verifying edge cases.
+- [ ] **Pre-existing auth.ts type errors** — `src/lib/auth.ts` has TS errors on lines 39-40 (casting `User | AdapterUser` to `{ username }` / `{ role }`). Works at runtime but fails `tsc --noEmit`. Should add proper type narrowing.
+
+## Testing
+
+Tests use **Vitest** with native tsconfig path resolution. Run with `npm test` or `npm run test:watch`.
+
+```
+src/__tests__/
+├── nfl-teams.test.ts    # NFL team data integrity, getTeamName lookup
+├── espn.test.ts         # ESPN abbreviation mapping, week params, URL builder
+└── pick-logic.test.ts   # Per-game kickoff locking, pick visibility rules, auto-grading, point values
+```
+
+Tests cover the core business logic extracted from API routes: kickoff locking, pick visibility (own picks always visible, admin sees all, others hidden until kickoff), grading (WIN/LOSS determination), and playoff point escalation. API routes themselves are not directly tested (they depend on Prisma/NextAuth) — consider integration tests with a test database for that layer.
