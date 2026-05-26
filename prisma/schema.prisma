@@ -1,0 +1,115 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  PLAYER
+}
+
+enum GameStatus {
+  SCHEDULED
+  LIVE
+  FINAL
+}
+
+enum PickResult {
+  PENDING
+  WIN
+  LOSS
+  PUSH
+}
+
+
+model User {
+  id             String       @id @default(cuid())
+  username       String       @unique
+  passwordHash   String
+  displayName    String
+  role           Role         @default(PLAYER)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  picks          Pick[]
+  inviteCodeUsed String?      @unique
+  inviteCode     InviteCode?  @relation("UsedBy", fields: [inviteCodeUsed], references: [code])
+  createdInvites InviteCode[] @relation("CreatedBy")
+  teamId         String?
+  team           Team?        @relation(fields: [teamId], references: [id])
+}
+
+model InviteCode {
+  id        String    @id @default(cuid())
+  code      String    @unique @default(cuid())
+  createdBy String
+  creator   User      @relation("CreatedBy", fields: [createdBy], references: [id])
+  usedBy    User?     @relation("UsedBy")
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model Season {
+  id        String   @id @default(cuid())
+  year      Int      @unique
+  isActive  Boolean  @default(false)
+  weeks     Week[]
+  createdAt DateTime @default(now())
+}
+
+model Week {
+  id           String   @id @default(cuid())
+  seasonId     String
+  season       Season   @relation(fields: [seasonId], references: [id])
+  weekNumber   Int
+  label        String
+  isPlayoff    Boolean  @default(false)
+  pointValue   Int      @default(1)
+  pickDeadline DateTime
+  games        Game[]
+  picks        Pick[]
+  createdAt    DateTime @default(now())
+
+  @@unique([seasonId, weekNumber])
+}
+
+model Game {
+  id         String     @id @default(cuid())
+  weekId     String
+  week       Week       @relation(fields: [weekId], references: [id])
+  homeTeam   String
+  awayTeam   String
+  homeScore  Int?
+  awayScore  Int?
+  status     GameStatus @default(SCHEDULED)
+  kickoff    DateTime
+  externalId String?    @unique
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+}
+
+model Pick {
+  id        String     @id @default(cuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id])
+  weekId    String
+  week      Week       @relation(fields: [weekId], references: [id])
+  team      String
+  result    PickResult @default(PENDING)
+  points    Int        @default(0)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@unique([userId, weekId])
+  @@index([userId])
+}
+
+model Team {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  members   User[]
+  createdAt DateTime @default(now())
+}
