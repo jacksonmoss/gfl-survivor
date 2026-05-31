@@ -1,27 +1,35 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const isAdmin = session.user.role === "ADMIN";
 
-  const activeSeason = await prisma.season.findFirst({
-    where: { isActive: true },
+  // All seasons, for the leaderboard's season selector (history)
+  const seasons = await prisma.season.findMany({
+    select: { id: true, year: true, isActive: true },
+    orderBy: { year: "desc" },
   });
 
-  if (!activeSeason) {
-    return NextResponse.json({ players: [], teams: [] });
+  // Selected season: explicit ?seasonId= wins, otherwise the active season
+  const seasonId = req.nextUrl.searchParams.get("seasonId");
+  const season = seasonId
+    ? await prisma.season.findUnique({ where: { id: seasonId } })
+    : await prisma.season.findFirst({ where: { isActive: true } });
+
+  if (!season) {
+    return NextResponse.json({ players: [], teams: [], seasons, season: null });
   }
 
   // Get all users with their picks for this season, including game data for visibility check
   const users = await prisma.user.findMany({
     include: {
       picks: {
-        where: { week: { seasonId: activeSeason.id } },
+        where: { week: { seasonId: season.id } },
         include: { week: { include: { games: true } } },
       },
       team: true,
@@ -98,5 +106,10 @@ export async function GET() {
     })
     .sort((a, b) => b.avgWinPct - a.avgWinPct);
 
-  return NextResponse.json({ players, teams });
+  return NextResponse.json({
+    players,
+    teams,
+    seasons,
+    season: { id: season.id, year: season.year, isActive: season.isActive },
+  });
 }

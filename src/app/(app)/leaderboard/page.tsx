@@ -30,24 +30,60 @@ interface TeamStanding {
   players: { displayName: string; points: number; winPct: number }[];
 }
 
+interface SeasonOption {
+  id: string;
+  year: number;
+  isActive: boolean;
+}
+
 export default function LeaderboardPage() {
   const [players, setPlayers] = useState<PlayerStanding[]>([]);
   const [teams, setTeams] = useState<TeamStanding[]>([]);
+  const [seasons, setSeasons] = useState<SeasonOption[]>([]);
+  const [seasonId, setSeasonId] = useState<string>("");
   const [tab, setTab] = useState<"players" | "teams">("players");
   const [expandedPlayer, setExpandedPlayer] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetch("/api/leaderboard")
+  function load(id?: string) {
+    const url = id ? `/api/leaderboard?seasonId=${id}` : "/api/leaderboard";
+    fetch(url)
       .then((r) => r.json())
       .then((data) => {
-        setPlayers(data.players);
-        setTeams(data.teams);
+        setPlayers(data.players ?? []);
+        setTeams(data.teams ?? []);
+        setSeasons(data.seasons ?? []);
+        if (data.season) setSeasonId(data.season.id);
       });
+  }
+
+  useEffect(() => {
+    load();
   }, []);
+
+  function onSeasonChange(id: string) {
+    setSeasonId(id);
+    setExpandedPlayer(null);
+    load(id);
+  }
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <h1 className="text-xl sm:text-2xl font-bold">Leaderboard</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-xl sm:text-2xl font-bold">Leaderboard</h1>
+        {seasons.length > 0 && (
+          <select
+            value={seasonId}
+            onChange={(e) => onSeasonChange(e.target.value)}
+            className="rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white"
+          >
+            {seasons.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.year} Season{s.isActive ? " (current)" : ""}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
 
       <div className="flex gap-1">
         <button

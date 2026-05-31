@@ -63,7 +63,7 @@ src/
 │       ├── auth/[...nextauth]/     # NextAuth handler
 │       ├── auth/register/          # POST — invite-gated registration
 │       ├── picks/                  # GET season+picks, POST submit/change pick
-│       ├── leaderboard/            # GET player standings + team trophy (filters picks by visibility)
+│       ├── leaderboard/            # GET player standings + team trophy (filters picks by visibility); ?seasonId= for history
 │       ├── scores/sync/            # POST — fetch live scores from ESPN, update games, auto-grade picks
 │       ├── settings/               # GET profile, PATCH update name/password
 │       ├── teams/                  # GET list, POST create/join/leave
@@ -146,12 +146,12 @@ Team ── User[] (members, for team trophy standings)
 - [x] Auto-grade picks — picks graded automatically when games go FINAL
 - [x] Client-side live polling — picks page polls every 30s during active game windows
 - [x] Vitest test suite — 28 tests covering NFL teams, ESPN helpers, pick locking, visibility, grading
+- [x] Season history — leaderboard has a season selector to view any season's final standings + team trophy
 
 ## What Still Needs to Be Done
 
 - [ ] **Password reset** — currently no way to recover a forgotten password. Could add email or admin-reset flow.
 - [ ] **Notifications** — remind users to make their pick before kickoff (email, push, or in-app).
-- [ ] **Season history** — view past seasons' results, not just the active one.
 - [ ] **Deployment** — self-hosted initially; Docker Compose for production with nginx reverse proxy, or move to a managed platform.
 - [ ] **NEXTAUTH_SECRET** — generate a real secret for production (`openssl rand -base64 32`).
 - [ ] **Tie handling** — score sync currently picks the home team as winner on ties. NFL regular season games can't tie (overtime rules), but worth verifying edge cases.
