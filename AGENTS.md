@@ -34,6 +34,7 @@ Demo credentials:
 | DB | PostgreSQL 16 | Docker Compose, port 5433 (host 5432 already in use) |
 | Seed scripts | tsx | `prisma/seed.ts` (minimal), `prisma/seed-demo.ts` (full demo data) |
 | Testing | Vitest | `npm test` to run, `npm run test:watch` for watch mode |
+| Email | nodemailer | SMTP via `SMTP_*` env; console fallback when unconfigured |
 
 ## Prisma v7 Gotchas
 
@@ -62,6 +63,8 @@ src/
 │   └── api/
 │       ├── auth/[...nextauth]/     # NextAuth handler
 │       ├── auth/register/          # POST — invite-gated registration
+│       ├── auth/forgot-password/   # POST — request a reset link (no enumeration; emails if account has email)
+│       ├── auth/reset-password/    # POST — consume token, set new password
 │       ├── picks/                  # GET season+picks, POST submit/change pick
 │       ├── leaderboard/            # GET player standings + team trophy (filters picks by visibility); ?seasonId= for history
 │       ├── scores/sync/            # POST — fetch live scores from ESPN, update games, auto-grade picks
@@ -70,7 +73,9 @@ src/
 │       └── admin/
 │           ├── import-schedule/    # POST — import NFL schedule from ESPN for a season week (admin only)
 │           ├── invites/            # GET/POST invite codes (admin only)
-│           └── season/             # GET/POST seasons (admin only)
+│           ├── season/             # GET/POST seasons (admin only)
+│           ├── users/              # GET user list (admin only)
+│           └── reset-password/     # POST — admin generates a temp password for a user (last resort)
 ├── components/
 │   └── navbar.tsx                  # Responsive nav with mobile hamburger menu
 ├── __tests__/
@@ -79,6 +84,8 @@ src/
 │   └── pick-logic.test.ts          # Kickoff locking, visibility, grading, point values
 └── lib/
     ├── auth.ts                     # NextAuth config (credentials provider, JWT callbacks)
+    ├── mailer.ts                   # nodemailer transport from SMTP_* env; logs to console when unconfigured
+    ├── password-reset.ts           # token gen/hash/expiry + temp password generation (pure, tested)
     ├── espn.ts                     # ESPN API helpers: team abbr mapping, URL builder, response types
     ├── types.ts                    # NextAuth session/JWT type augmentation
     ├── prisma.ts                   # Singleton PrismaClient with PrismaPg adapter
@@ -91,7 +98,9 @@ src/
 User ──┬── Pick (one per user per week, unique on userId+weekId)
        ├── Team (optional, for team trophy)
        ├── InviteCode (used one to register)
-       └── InviteCode[] (created, if admin)
+       ├── InviteCode[] (created, if admin)
+       ├── PasswordResetToken[] (single-use, hashed, 1h expiry)
+       └── email (optional, unique; used for password reset)
 
 Season ── Week[] ── Game[] (NFL games with scores/status)
                  └── Pick[] (all user picks for that week)
@@ -126,6 +135,7 @@ Team ── User[] (members, for team trophy standings)
 - **ESPN integration** — uses ESPN's public scoreboard API (`site.api.espn.com`). Team abbreviation mapping in `src/lib/espn.ts` (ESPN uses "WSH", we use "WAS"). Games are matched via `externalId` (ESPN event ID) stored on the Game model.
 - **Live score polling** — picks page auto-polls every 30s when games are live/started. Calls `/api/scores/sync` (rate-limited to 1 call per 30s globally) then re-fetches picks data. The sync endpoint is accessible to any authenticated user.
 - **Auto-grading** — when the score sync detects a game transition to FINAL, it determines the winner and sets all PENDING picks for that game to WIN/LOSS with points based on `week.pointValue`.
+- **Password reset** — email is optional, set on the Settings page. `/forgot-password` requests a link (always returns success to avoid account enumeration; only sends if the account has an email). Tokens are random 32-byte hex, stored only as a SHA-256 hash, single-use, 1h expiry. `/reset-password?token=` consumes it. Email is sent via `lib/mailer.ts` (SMTP from `SMTP_*` env; logs the link to the console when SMTP is unconfigured). Admins have a last-resort reset in the admin panel that generates a temp password (returned once, never stored) to relay out of band.
 
 ## What's Done
 
@@ -145,12 +155,12 @@ Team ── User[] (members, for team trophy standings)
 - [x] Live score syncing — fetches from ESPN, updates game scores/status in real time
 - [x] Auto-grade picks — picks graded automatically when games go FINAL
 - [x] Client-side live polling — picks page polls every 30s during active game windows
-- [x] Vitest test suite — 28 tests covering NFL teams, ESPN helpers, pick locking, visibility, grading
+- [x] Vitest test suite — 39 tests covering NFL teams, ESPN helpers, pick locking, visibility, grading, reset tokens
 - [x] Season history — leaderboard has a season selector to view any season's final standings + team trophy
+- [x] Password reset — email-based self-service reset (nodemailer/SMTP, console fallback) with admin temp-password reset as last resort
 
 ## What Still Needs to Be Done
 
-- [ ] **Password reset** — currently no way to recover a forgotten password. Could add email or admin-reset flow.
 - [ ] **Notifications** — remind users to make their pick before kickoff (email, push, or in-app).
 - [ ] **Deployment** — self-hosted initially; Docker Compose for production with nginx reverse proxy, or move to a managed platform.
 - [ ] **NEXTAUTH_SECRET** — generate a real secret for production (`openssl rand -base64 32`).
@@ -163,9 +173,10 @@ Tests use **Vitest** with native tsconfig path resolution. Run with `npm test` o
 
 ```
 src/__tests__/
-├── nfl-teams.test.ts    # NFL team data integrity, getTeamName lookup
-├── espn.test.ts         # ESPN abbreviation mapping, week params, URL builder
-└── pick-logic.test.ts   # Per-game kickoff locking, pick visibility rules, auto-grading, point values
+├── nfl-teams.test.ts       # NFL team data integrity, getTeamName lookup
+├── espn.test.ts            # ESPN abbreviation mapping, week params, URL builder
+├── pick-logic.test.ts      # Per-game kickoff locking, pick visibility rules, auto-grading, point values
+└── password-reset.test.ts  # Reset token gen/hash/expiry, temp password generation
 ```
 
 Tests cover the core business logic extracted from API routes: kickoff locking, pick visibility (own picks always visible, admin sees all, others hidden until kickoff), grading (WIN/LOSS determination), and playoff point escalation. API routes themselves are not directly tested (they depend on Prisma/NextAuth) — consider integration tests with a test database for that layer.

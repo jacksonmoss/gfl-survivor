@@ -81,6 +81,15 @@ export default function LoginPage() {
         </form>
 
         <p className="text-center text-sm text-gray-400">
+          <Link
+            href="/forgot-password"
+            className="text-blue-400 hover:text-blue-300"
+          >
+            Forgot your password?
+          </Link>
+        </p>
+
+        <p className="text-center text-sm text-gray-400">
           Have an invite code?{" "}
           <Link href="/register" className="text-blue-400 hover:text-blue-300">
             Create an account

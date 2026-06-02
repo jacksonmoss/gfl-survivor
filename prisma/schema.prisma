@@ -27,19 +27,32 @@ enum PickResult {
 
 
 model User {
-  id             String       @id @default(cuid())
-  username       String       @unique
+  id             String               @id @default(cuid())
+  username       String               @unique
+  email          String?              @unique
   passwordHash   String
   displayName    String
-  role           Role         @default(PLAYER)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  role           Role                 @default(PLAYER)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
   picks          Pick[]
-  inviteCodeUsed String?      @unique
-  inviteCode     InviteCode?  @relation("UsedBy", fields: [inviteCodeUsed], references: [code])
-  createdInvites InviteCode[] @relation("CreatedBy")
+  inviteCodeUsed String?              @unique
+  inviteCode     InviteCode?          @relation("UsedBy", fields: [inviteCodeUsed], references: [code])
+  createdInvites InviteCode[]         @relation("CreatedBy")
   teamId         String?
-  team           Team?        @relation(fields: [teamId], references: [id])
+  team           Team?                @relation(fields: [teamId], references: [id])
+  resetTokens    PasswordResetToken[]
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model InviteCode {

@@ -10,6 +10,7 @@ interface Team {
 
 export default function SettingsPage() {
   const [displayName, setDisplayName] = useState("");
+  const [email, setEmail] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -29,6 +30,7 @@ export default function SettingsPage() {
       .then((r) => r.json())
       .then((data) => {
         setDisplayName(data.displayName || "");
+        setEmail(data.email || "");
       });
     fetchTeams();
   }, []);
@@ -49,12 +51,12 @@ export default function SettingsPage() {
     const res = await fetch("/api/settings", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ displayName }),
+      body: JSON.stringify({ displayName, email }),
     });
 
     const data = await res.json();
     if (res.ok) {
-      setMessage("Display name updated");
+      setMessage("Profile updated");
     } else {
       setError(data.error);
     }
@@ -180,6 +182,22 @@ export default function SettingsPage() {
               required
               className="mt-1 block w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
+          </div>
+          <div>
+            <label htmlFor="email" className="block text-sm font-medium text-gray-300">
+              Email
+            </label>
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              className="mt-1 block w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              Used for password reset. Leave blank to remove it.
+            </p>
           </div>
           <button
             type="submit"

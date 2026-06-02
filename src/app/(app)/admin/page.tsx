@@ -16,6 +16,14 @@ interface Season {
   weeks: { id: string; label: string; weekNumber: number; _count: { games: number; picks: number } }[];
 }
 
+interface AdminUser {
+  id: string;
+  username: string;
+  displayName: string;
+  email: string | null;
+  role: string;
+}
+
 export default function AdminPage() {
   const [invites, setInvites] = useState<InviteCode[]>([]);
   const [seasons, setSeasons] = useState<Season[]>([]);
@@ -26,15 +34,20 @@ export default function AdminPage() {
   const [importResult, setImportResult] = useState("");
   const [importAll, setImportAll] = useState(false);
   const [syncResult, setSyncResult] = useState("");
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [resetUserId, setResetUserId] = useState("");
+  const [tempPwResult, setTempPwResult] = useState<{ username: string; tempPassword: string } | null>(null);
+  const [resetLoading, setResetLoading] = useState(false);
 
   useEffect(() => {
     fetchData();
   }, []);
 
   async function fetchData() {
-    const [invitesRes, seasonsRes] = await Promise.all([
+    const [invitesRes, seasonsRes, usersRes] = await Promise.all([
       fetch("/api/admin/invites"),
       fetch("/api/admin/season"),
+      fetch("/api/admin/users"),
     ]);
     if (invitesRes.ok) setInvites(await invitesRes.json());
     if (seasonsRes.ok) {
@@ -44,6 +57,28 @@ export default function AdminPage() {
         setImportSeasonId(data[0].id);
       }
     }
+    if (usersRes.ok) {
+      const data = await usersRes.json();
+      setUsers(data);
+      if (data.length > 0 && !resetUserId) {
+        setResetUserId(data[0].id);
+      }
+    }
+  }
+
+  async function resetUserPassword() {
+    if (!resetUserId) return;
+    setResetLoading(true);
+    setTempPwResult(null);
+    const res = await fetch("/api/admin/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: resetUserId }),
+    });
+    if (res.ok) {
+      setTempPwResult(await res.json());
+    }
+    setResetLoading(false);
   }
 
   async function generateInvite() {
@@ -339,6 +374,57 @@ export default function AdminPage() {
             </div>
           )}
         </div>
+      </section>
+
+      {/* Password Resets (last resort) */}
+      <section className="space-y-4">
+        <h2 className="text-lg font-semibold">Password Resets</h2>
+        <p className="text-sm text-gray-400">
+          For players without an email on file. Generates a temporary password
+          to relay to them; they should change it after signing in.
+        </p>
+
+        <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3">
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Player</label>
+            <select
+              value={resetUserId}
+              onChange={(e) => {
+                setResetUserId(e.target.value);
+                setTempPwResult(null);
+              }}
+              className="rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white"
+            >
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.displayName} (@{u.username}){u.email ? "" : " — no email"}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            onClick={resetUserPassword}
+            disabled={resetLoading || !resetUserId}
+            className="rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+          >
+            {resetLoading ? "Resetting..." : "Reset Password"}
+          </button>
+        </div>
+
+        {tempPwResult && (
+          <div className="rounded-md bg-gray-900 border border-amber-700 p-3 text-sm">
+            <div className="text-gray-300">
+              Temporary password for{" "}
+              <span className="font-medium">@{tempPwResult.username}</span>:
+            </div>
+            <div className="mt-1 font-mono text-base text-amber-300 break-all">
+              {tempPwResult.tempPassword}
+            </div>
+            <div className="mt-1 text-xs text-gray-500">
+              Shown once. Relay it securely; it won&apos;t be displayed again.
+            </div>
+          </div>
+        )}
       </section>
     </div>
   );
