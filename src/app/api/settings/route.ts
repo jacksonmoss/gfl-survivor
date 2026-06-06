@@ -10,7 +10,7 @@ export async function GET() {
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { displayName: true, username: true, teamId: true, team: { select: { name: true } } },
+    select: { displayName: true, username: true, email: true, teamId: true, team: { select: { name: true } } },
   });
 
   return NextResponse.json(user);
@@ -20,12 +20,33 @@ export async function PATCH(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { displayName, currentPassword, newPassword } = await req.json();
+  const { displayName, email, currentPassword, newPassword } = await req.json();
 
-  const updates: Record<string, string> = {};
+  const updates: Record<string, string | null> = {};
 
   if (displayName) {
     updates.displayName = displayName;
+  }
+
+  if (email !== undefined) {
+    const trimmed = typeof email === "string" ? email.trim().toLowerCase() : "";
+    if (trimmed === "") {
+      updates.email = null;
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      return NextResponse.json(
+        { error: "Please enter a valid email address" },
+        { status: 400 }
+      );
+    } else {
+      const existing = await prisma.user.findUnique({ where: { email: trimmed } });
+      if (existing && existing.id !== session.user.id) {
+        return NextResponse.json(
+          { error: "That email is already in use" },
+          { status: 400 }
+        );
+      }
+      updates.email = trimmed;
+    }
   }
 
   if (newPassword) {
