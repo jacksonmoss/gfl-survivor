@@ -26,12 +26,6 @@ interface TeamStanding {
 
 interface SeasonOption { id: string; year: number; isActive: boolean }
 
-function resultColor(r: string) {
-  if (r === "WIN") return "text-green-400";
-  if (r === "LOSS") return "text-red-400";
-  return "text-gray-500";
-}
-
 export default function LeaderboardPage() {
   const [players, setPlayers] = useState<PlayerStanding[]>([]);
   const [teams, setTeams] = useState<TeamStanding[]>([]);

@@ -77,7 +77,10 @@ export default function PicksPage() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const id = setTimeout(load, 0);
+    return () => clearTimeout(id);
+  }, [load]);
 
   useEffect(() => {
     if (!season) return;
