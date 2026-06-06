@@ -1,0 +1,40 @@
+{
+  "events": [
+    {
+      "id": "401671801",
+      "competitions": [{
+        "id": "401671801",
+        "date": "2025-09-07T13:00:00Z",
+        "status": { "type": { "id": "1", "name": "STATUS_SCHEDULED", "state": "pre", "completed": false } },
+        "competitors": [
+          { "homeAway": "home", "team": { "abbreviation": "KC" }, "score": "0" },
+          { "homeAway": "away", "team": { "abbreviation": "DET" }, "score": "0" }
+        ]
+      }]
+    },
+    {
+      "id": "401671802",
+      "competitions": [{
+        "id": "401671802",
+        "date": "2025-09-07T17:00:00Z",
+        "status": { "type": { "id": "1", "name": "STATUS_SCHEDULED", "state": "pre", "completed": false } },
+        "competitors": [
+          { "homeAway": "home", "team": { "abbreviation": "BUF" }, "score": "0" },
+          { "homeAway": "away", "team": { "abbreviation": "MIA" }, "score": "0" }
+        ]
+      }]
+    },
+    {
+      "id": "401671803",
+      "competitions": [{
+        "id": "401671803",
+        "date": "2025-09-07T20:20:00Z",
+        "status": { "type": { "id": "1", "name": "STATUS_SCHEDULED", "state": "pre", "completed": false } },
+        "competitors": [
+          { "homeAway": "home", "team": { "abbreviation": "SF" }, "score": "0" },
+          { "homeAway": "away", "team": { "abbreviation": "DAL" }, "score": "0" }
+        ]
+      }]
+    }
+  ]
+}
