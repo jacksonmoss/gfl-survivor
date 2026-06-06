@@ -2,351 +2,166 @@
 
 import { useEffect, useState } from "react";
 
-interface Team {
-  id: string;
-  name: string;
-  members: { id: string; displayName: string }[];
-}
-
 export default function SettingsPage() {
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+  const [teamName, setTeamName] = useState<string | null>(null);
+  const [profileMsg, setProfileMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [pwMsg, setPwMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
-
-  // Teams
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [myTeamId, setMyTeamId] = useState<string | null>(null);
-  const [newTeamName, setNewTeamName] = useState("");
-  const [teamError, setTeamError] = useState("");
-  const [teamMessage, setTeamMessage] = useState("");
 
   useEffect(() => {
     fetch("/api/settings")
       .then((r) => r.json())
       .then((data) => {
-        setDisplayName(data.displayName || "");
-        setEmail(data.email || "");
+        setDisplayName(data.displayName ?? "");
+        setEmail(data.email ?? "");
+        setTeamName(data.team?.name ?? null);
       });
-    fetchTeams();
   }, []);
 
-  async function fetchTeams() {
-    const res = await fetch("/api/teams");
-    const data = await res.json();
-    setTeams(data.teams);
-    setMyTeamId(data.myTeamId);
-  }
-
-  async function handleProfileUpdate(e: React.FormEvent) {
+  async function saveProfile(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    setError("");
-    setMessage("");
-
+    setProfileMsg(null);
     const res = await fetch("/api/settings", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ displayName, email }),
     });
-
     const data = await res.json();
-    if (res.ok) {
-      setMessage("Profile updated");
-    } else {
-      setError(data.error);
-    }
+    setProfileMsg(res.ok ? { type: "ok", text: "Saved" } : { type: "err", text: data.error });
     setLoading(false);
   }
 
-  async function handlePasswordChange(e: React.FormEvent) {
+  async function changePassword(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
-    setError("");
-    setMessage("");
-
     if (newPassword !== confirmPassword) {
-      setError("Passwords do not match");
-      setLoading(false);
+      setPwMsg({ type: "err", text: "Passwords do not match" });
       return;
     }
-
+    setLoading(true);
+    setPwMsg(null);
     const res = await fetch("/api/settings", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ currentPassword, newPassword }),
     });
-
     const data = await res.json();
     if (res.ok) {
-      setMessage("Password updated");
+      setPwMsg({ type: "ok", text: "Password updated" });
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
     } else {
-      setError(data.error);
+      setPwMsg({ type: "err", text: data.error });
     }
     setLoading(false);
   }
 
-  async function createTeam(e: React.FormEvent) {
-    e.preventDefault();
-    setTeamError("");
-    setTeamMessage("");
-
-    const res = await fetch("/api/teams", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "create", teamName: newTeamName }),
-    });
-
-    const data = await res.json();
-    if (res.ok) {
-      setTeamMessage(`Created and joined team "${newTeamName}"`);
-      setNewTeamName("");
-      fetchTeams();
-    } else {
-      setTeamError(data.error);
-    }
-  }
-
-  async function joinTeam(teamId: string) {
-    setTeamError("");
-    setTeamMessage("");
-
-    const res = await fetch("/api/teams", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "join", teamId }),
-    });
-
-    if (res.ok) {
-      setTeamMessage("Joined team");
-      fetchTeams();
-    } else {
-      const data = await res.json();
-      setTeamError(data.error);
-    }
-  }
-
-  async function leaveTeam() {
-    setTeamError("");
-    setTeamMessage("");
-
-    const res = await fetch("/api/teams", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "leave" }),
-    });
-
-    if (res.ok) {
-      setTeamMessage("Left team");
-      fetchTeams();
-    }
-  }
-
-  const myTeam = teams.find((t) => t.id === myTeamId);
-
   return (
-    <div className="space-y-8 max-w-lg">
-      <h1 className="text-xl sm:text-2xl font-bold">Settings</h1>
+    <div className="max-w-lg space-y-6">
+      <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
 
-      {message && (
-        <div className="rounded-md bg-green-900/50 border border-green-700 p-3 text-sm text-green-300">
-          {message}
-        </div>
-      )}
-      {error && (
-        <div className="rounded-md bg-red-900/50 border border-red-700 p-3 text-sm text-red-300">
-          {error}
-        </div>
-      )}
-
-      {/* Profile */}
-      <section className="space-y-4">
-        <h2 className="text-lg font-semibold">Profile</h2>
-        <form onSubmit={handleProfileUpdate} className="space-y-3">
-          <div>
-            <label htmlFor="displayName" className="block text-sm font-medium text-gray-300">
-              Display Name
-            </label>
+      {/* Profile card */}
+      <div className="rounded-xl border border-white/10 bg-white/5 p-6 space-y-5">
+        <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider">Profile</h2>
+        <form onSubmit={saveProfile} className="space-y-4">
+          <Field label="Display Name">
             <input
-              id="displayName"
               type="text"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               required
-              className="mt-1 block w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className={input}
             />
-          </div>
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-300">
-              Email
-            </label>
+          </Field>
+          <Field label="Email" hint="Used for password reset. Leave blank to remove.">
             <input
-              id="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
-              className="mt-1 block w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className={input}
             />
-            <p className="mt-1 text-xs text-gray-500">
-              Used for password reset. Leave blank to remove it.
-            </p>
-          </div>
-          <button
-            type="submit"
-            disabled={loading}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-          >
-            Update Profile
+          </Field>
+          {teamName && (
+            <Field label="Team">
+              <div className="flex items-center h-10 px-3 rounded-lg border border-white/10 bg-white/5 text-sm text-gray-300">
+                {teamName}
+              </div>
+            </Field>
+          )}
+          {profileMsg && <Feedback msg={profileMsg} />}
+          <button type="submit" disabled={loading} className={btn}>
+            Save Profile
           </button>
         </form>
-      </section>
+      </div>
 
-      {/* Team */}
-      <section className="space-y-4">
-        <h2 className="text-lg font-semibold">Team Trophy</h2>
-
-        {teamMessage && (
-          <div className="rounded-md bg-green-900/50 border border-green-700 p-3 text-sm text-green-300">
-            {teamMessage}
-          </div>
-        )}
-        {teamError && (
-          <div className="rounded-md bg-red-900/50 border border-red-700 p-3 text-sm text-red-300">
-            {teamError}
-          </div>
-        )}
-
-        {myTeam ? (
-          <div className="space-y-3">
-            <div className="rounded-lg border border-gray-700 bg-gray-800 p-3 sm:p-4">
-              <div className="text-xs text-gray-400">Your team</div>
-              <div className="mt-1 text-lg font-semibold">{myTeam.name}</div>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {myTeam.members.map((m) => (
-                  <span key={m.id} className="rounded-md bg-gray-700 px-2 py-1 text-xs">
-                    {m.displayName}
-                  </span>
-                ))}
-              </div>
-            </div>
-            <button
-              onClick={leaveTeam}
-              className="rounded-md bg-red-600/20 border border-red-700 px-4 py-2 text-sm font-medium text-red-400 hover:bg-red-600/30"
-            >
-              Leave Team
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <form onSubmit={createTeam} className="flex gap-2">
-              <input
-                type="text"
-                value={newTeamName}
-                onChange={(e) => setNewTeamName(e.target.value)}
-                placeholder="New team name"
-                required
-                className="flex-1 rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-              <button
-                type="submit"
-                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-              >
-                Create
-              </button>
-            </form>
-
-            {teams.length > 0 && (
-              <div className="space-y-2">
-                <div className="text-sm text-gray-400">Or join an existing team:</div>
-                <div className="space-y-2">
-                  {teams.map((team) => (
-                    <div
-                      key={team.id}
-                      className="flex items-center justify-between rounded-lg border border-gray-700 bg-gray-800/50 p-3"
-                    >
-                      <div>
-                        <div className="font-medium text-sm">{team.name}</div>
-                        <div className="text-xs text-gray-400">
-                          {team.members.length} member{team.members.length !== 1 ? "s" : ""}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => joinTeam(team.id)}
-                        className="rounded-md bg-gray-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-600"
-                      >
-                        Join
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </section>
-
-      {/* Password */}
-      <section className="space-y-4">
-        <h2 className="text-lg font-semibold">Change Password</h2>
-        <form onSubmit={handlePasswordChange} className="space-y-3">
-          <div>
-            <label htmlFor="currentPassword" className="block text-sm font-medium text-gray-300">
-              Current Password
-            </label>
+      {/* Password card */}
+      <div className="rounded-xl border border-white/10 bg-white/5 p-6 space-y-5">
+        <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider">Password</h2>
+        <form onSubmit={changePassword} className="space-y-4">
+          <Field label="Current Password">
             <input
-              id="currentPassword"
               type="password"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
               required
-              className="mt-1 block w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className={input}
             />
-          </div>
-          <div>
-            <label htmlFor="newPassword" className="block text-sm font-medium text-gray-300">
-              New Password
-            </label>
+          </Field>
+          <Field label="New Password">
             <input
-              id="newPassword"
               type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               required
               minLength={6}
-              className="mt-1 block w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className={input}
             />
-          </div>
-          <div>
-            <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-300">
-              Confirm New Password
-            </label>
+          </Field>
+          <Field label="Confirm New Password">
             <input
-              id="confirmPassword"
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
               minLength={6}
-              className="mt-1 block w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className={input}
             />
-          </div>
-          <button
-            type="submit"
-            disabled={loading}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-          >
-            Change Password
+          </Field>
+          {pwMsg && <Feedback msg={pwMsg} />}
+          <button type="submit" disabled={loading} className={btn}>
+            Update Password
           </button>
         </form>
-      </section>
+      </div>
     </div>
   );
 }
+
+function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <label className="block text-sm font-medium text-gray-300">{label}</label>
+      {children}
+      {hint && <p className="text-xs text-gray-500">{hint}</p>}
+    </div>
+  );
+}
+
+function Feedback({ msg }: { msg: { type: "ok" | "err"; text: string } }) {
+  return (
+    <p className={`text-sm ${msg.type === "ok" ? "text-green-400" : "text-red-400"}`}>
+      {msg.text}
+    </p>
+  );
+}
+
+const input = "w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors";
+const btn = "rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 active:scale-95 disabled:opacity-50 transition-all";
