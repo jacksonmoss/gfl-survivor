@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { mapTeamAbbr, getESPNWeekParams, buildESPNUrl } from "@/lib/espn";
+import { getESPNWeekParams, buildESPNUrl } from "@/lib/espn";
 import type { ESPNResponse } from "@/lib/espn";
+import { extractImportableGames } from "@/lib/score-sync";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -49,40 +50,19 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const existingGames = await prisma.game.findMany({
+    where: { weekId: week.id },
+    select: { externalId: true },
+  });
+  const existingExternalIds = new Set(existingGames.map((g) => g.externalId).filter((id): id is string => id !== null));
+
+  const gamesToImport = extractImportableGames(data, existingExternalIds);
   let imported = 0;
-  let skipped = 0;
+  const skipped = data.events.length - gamesToImport.length;
 
-  for (const event of data.events) {
-    const competition = event.competitions[0];
-    if (!competition) continue;
-
-    const homeComp = competition.competitors.find((c) => c.homeAway === "home");
-    const awayComp = competition.competitors.find((c) => c.homeAway === "away");
-    if (!homeComp || !awayComp) continue;
-
-    const homeTeam = mapTeamAbbr(homeComp.team.abbreviation);
-    const awayTeam = mapTeamAbbr(awayComp.team.abbreviation);
-    const kickoff = new Date(competition.date);
-    const externalId = event.id;
-
-    // Skip if already imported
-    const existing = await prisma.game.findUnique({
-      where: { externalId },
-    });
-
-    if (existing) {
-      skipped++;
-      continue;
-    }
-
+  for (const game of gamesToImport) {
     await prisma.game.create({
-      data: {
-        weekId: week.id,
-        homeTeam,
-        awayTeam,
-        kickoff,
-        externalId,
-      },
+      data: { weekId: week.id, ...game },
     });
     imported++;
   }

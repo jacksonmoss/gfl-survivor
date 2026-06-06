@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { mapTeamAbbr, getESPNWeekParams, buildESPNUrl } from "@/lib/espn";
+import { getESPNWeekParams, buildESPNUrl } from "@/lib/espn";
 import type { ESPNResponse } from "@/lib/espn";
+import { computeAllGameUpdates } from "@/lib/score-sync";
 
 let lastSyncTime = 0;
 const SYNC_COOLDOWN_MS = 30_000;
@@ -55,60 +56,45 @@ export async function POST() {
   let synced = 0;
   let graded = 0;
 
-  for (const event of data.events) {
-    const competition = event.competitions[0];
-    if (!competition) continue;
+  const updates = computeAllGameUpdates(
+    data,
+    currentWeek.games
+      .filter((g) => g.externalId !== null)
+      .map((g) => ({
+        id: g.id,
+        externalId: g.externalId as string,
+        homeScore: g.homeScore ?? 0,
+        awayScore: g.awayScore ?? 0,
+        status: g.status as "SCHEDULED" | "LIVE" | "FINAL",
+      }))
+  );
 
-    const espnStatus = competition.status.type.state;
-    const dbGame = currentWeek.games.find((g) => g.externalId === event.id);
-    if (!dbGame) continue;
+  for (const update of updates) {
+    await prisma.game.update({
+      where: { id: update.gameId },
+      data: { homeScore: update.homeScore, awayScore: update.awayScore, status: update.status },
+    });
+    synced++;
 
-    const homeComp = competition.competitors.find((c) => c.homeAway === "home");
-    const awayComp = competition.competitors.find((c) => c.homeAway === "away");
-    if (!homeComp || !awayComp) continue;
-
-    const homeScore = parseInt(homeComp.score) || 0;
-    const awayScore = parseInt(awayComp.score) || 0;
-
-    let newStatus: "SCHEDULED" | "LIVE" | "FINAL";
-    if (espnStatus === "post") newStatus = "FINAL";
-    else if (espnStatus === "in") newStatus = "LIVE";
-    else newStatus = "SCHEDULED";
-
-    // Only update if something changed
-    if (dbGame.homeScore !== homeScore || dbGame.awayScore !== awayScore || dbGame.status !== newStatus) {
-      await prisma.game.update({
-        where: { id: dbGame.id },
-        data: { homeScore, awayScore, status: newStatus },
+    if (update.justFinished && update.winnerTeam && update.losingTeam) {
+      const picksToGrade = await prisma.pick.findMany({
+        where: {
+          weekId: currentWeek.id,
+          team: { in: [update.winnerTeam, update.losingTeam] },
+          result: "PENDING",
+        },
       });
-      synced++;
 
-      // Auto-grade picks when a game goes FINAL
-      if (newStatus === "FINAL" && dbGame.status !== "FINAL") {
-        const homeTeam = mapTeamAbbr(homeComp.team.abbreviation);
-        const awayTeam = mapTeamAbbr(awayComp.team.abbreviation);
-        const winner = homeScore > awayScore ? homeTeam : awayTeam;
-
-        // Grade all PENDING picks for teams in this game
-        const picksToGrade = await prisma.pick.findMany({
-          where: {
-            weekId: currentWeek.id,
-            team: { in: [homeTeam, awayTeam] },
-            result: "PENDING",
+      for (const pick of picksToGrade) {
+        const isWin = pick.team === update.winnerTeam;
+        await prisma.pick.update({
+          where: { id: pick.id },
+          data: {
+            result: isWin ? "WIN" : "LOSS",
+            points: isWin ? currentWeek.pointValue : 0,
           },
         });
-
-        for (const pick of picksToGrade) {
-          const isWin = pick.team === winner;
-          await prisma.pick.update({
-            where: { id: pick.id },
-            data: {
-              result: isWin ? "WIN" : "LOSS",
-              points: isWin ? currentWeek.pointValue : 0,
-            },
-          });
-          graded++;
-        }
+        graded++;
       }
     }
   }

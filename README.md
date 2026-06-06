@@ -1,36 +1,81 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# GFL Survivor Pool
 
-## Getting Started
+Custom NFL survivor pool app built for Jackson's league. Replaces Splash Sports with support for playoff point escalation and team trophies.
 
-First, run the development server:
+## Quick start
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# 1. Start the database
+docker compose up -d
+
+# 2. Copy env and fill in required values
+cp .env.example .env
+
+# 3. Run migrations and seed demo data
+npx prisma migrate deploy
+npm run seed:demo     # or: npm run seed  (minimal — admin + invite codes only)
+
+# 4. Start the dev server
+npm run dev           # → http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Demo credentials (seed:demo only):
+- Admin: `admin` / `admin123`
+- Players: any of `jdog`, `mike_t`, `sara_k`, `bigben`, `chadwick`, `tommy_b`, `lucky13`, `ace_v`, `queenb`, `zeke99` with password `password`
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Environment variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+See `.env.example` for all variables. Required in production:
 
-## Learn More
+| Variable | Description |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `NEXTAUTH_URL` | Full public URL (e.g. `https://gfl.example.com`) |
+| `NEXTAUTH_SECRET` | Random secret — generate with `openssl rand -base64 32` |
 
-To learn more about Next.js, take a look at the following resources:
+SMTP variables are optional. When `SMTP_HOST` is unset, password reset links are logged to the server console instead of being emailed.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Common tasks
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm run dev           # Dev server with Turbopack
+npm run build         # Production build
+npm test              # Vitest unit tests
+npm run lint          # ESLint
 
-## Deploy on Vercel
+npx prisma studio     # Browse the DB in a GUI
+npx prisma migrate dev --name <name>   # Create a new migration
+npx prisma migrate deploy              # Apply pending migrations (production)
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Stack
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Layer | Technology |
+|---|---|
+| Framework | Next.js 16 (App Router, TypeScript) |
+| Database | PostgreSQL 16 (Docker Compose for dev) |
+| ORM | Prisma v7 |
+| Auth | NextAuth v4 (credentials) |
+| Styling | Tailwind CSS v4 |
+| Testing | Vitest |
+| Email | nodemailer (SMTP or console fallback) |
+
+## Project structure
+
+```
+src/
+├── app/
+│   ├── (app)/            # Authenticated layout (picks, leaderboard, settings, admin)
+│   ├── api/              # Route handlers
+│   ├── login/            # Login page
+│   ├── register/         # Invite-gated registration
+│   ├── forgot-password/  # Request a reset link
+│   └── reset-password/   # Consume reset token
+├── lib/
+│   ├── auth.ts           # NextAuth config
+│   ├── prisma.ts         # Prisma client singleton
+│   ├── mailer.ts         # nodemailer transport
+│   ├── password-reset.ts # Token helpers
+│   └── espn.ts           # ESPN API helpers
+└── __tests__/            # Unit tests
+```
