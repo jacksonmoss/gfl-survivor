@@ -32,7 +32,9 @@ jobs:
             nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
 
       - name: Install dependencies
-        run: npm ci
+        # next-auth@4 declares a peer dep on nodemailer@^7, but the project pins
+        # nodemailer@8.0.10 (see commit fd72704) — same conflict exists locally.
+        run: npm ci --legacy-peer-deps
 
       - name: Generate Prisma client
         run: npx prisma generate
