@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 interface AdminUser {
   id: string;
@@ -57,11 +57,7 @@ export default function AdminPage() {
   const [latestCode, setLatestCode] = useState<string | null>(null);
   const [availableCodes, setAvailableCodes] = useState(0);
 
-  useEffect(() => {
-    loadAll();
-  }, []);
-
-  async function loadAll() {
+  const loadAll = useCallback(async () => {
     const [usersRes, teamsRes, seasonsRes, invitesRes] = await Promise.all([
       fetch("/api/admin/users"),
       fetch("/api/teams"),
@@ -81,14 +77,19 @@ export default function AdminPage() {
     if (seasonsRes.ok) {
       const data = await seasonsRes.json();
       setSeasons(data);
-      if (data.length > 0 && !importSeasonId) setImportSeasonId(data[0].id);
+      if (data.length > 0) setImportSeasonId((prev) => prev || data[0].id);
     }
     if (invitesRes.ok) {
       const data = await invitesRes.json();
       const available = (data as { usedBy: unknown }[]).filter((c) => !c.usedBy).length;
       setAvailableCodes(available);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    const id = setTimeout(loadAll, 0);
+    return () => clearTimeout(id);
+  }, [loadAll]);
 
   // --- Players ---
   async function resetPassword() {
