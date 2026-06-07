@@ -144,28 +144,28 @@ export default function LeaderboardPage() {
                     <tr key={`${player.id}-picks`} className="bg-black/20">
                       <td colSpan={6} className="px-4 py-3">
                         <div className="overflow-x-auto">
-                          <table className="w-full text-xs">
+                          <table className="text-xs whitespace-nowrap">
                             <thead>
-                              <tr className="text-gray-500 uppercase tracking-wider">
-                                <th className="text-left pb-2 pr-6 font-medium">Week</th>
-                                <th className="text-left pb-2 pr-6 font-medium">Team</th>
-                                <th className="text-left pb-2 font-medium">Result</th>
+                              <tr>
+                                {player.picks.sort((a, b) => a.week - b.week).map((pick) => (
+                                  <th key={pick.week} className="text-left pr-5 pb-1.5 font-medium text-gray-500 uppercase tracking-wider">
+                                    {pick.label.replace(/^Week (\d+)$/, "Wk $1")}
+                                  </th>
+                                ))}
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-white/5">
-                              {player.picks.sort((a, b) => a.week - b.week).map((pick) => (
-                                <tr key={pick.week}>
-                                  <td className="py-1.5 pr-6 text-gray-400">{pick.label}</td>
-                                  <td className="py-1.5 pr-6 text-gray-200">{getTeamName(pick.team)}</td>
-                                  <td className={`py-1.5 font-medium ${
+                            <tbody>
+                              <tr>
+                                {player.picks.sort((a, b) => a.week - b.week).map((pick) => (
+                                  <td key={pick.week} className={`pr-5 ${
                                     pick.result === "WIN" ? "text-green-400" :
                                     pick.result === "LOSS" ? "text-red-400" :
                                     "text-gray-500"
                                   }`}>
-                                    {pick.result === "WIN" ? "Win" : pick.result === "LOSS" ? "Loss" : "Pending"}
+                                    {getTeamName(pick.team)} {pick.result === "WIN" ? "✓" : pick.result === "LOSS" ? "✗" : "–"}
                                   </td>
-                                </tr>
-                              ))}
+                                ))}
+                              </tr>
                             </tbody>
                           </table>
                         </div>
