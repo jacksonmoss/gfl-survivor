@@ -30,10 +30,9 @@ export function isResetTokenExpired(
 const TEMP_PW_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
 
 export function generateTempPassword(length = 12): string {
-  const bytes = crypto.randomBytes(length);
   let out = "";
   for (let i = 0; i < length; i++) {
-    out += TEMP_PW_ALPHABET[bytes[i] % TEMP_PW_ALPHABET.length];
+    out += TEMP_PW_ALPHABET[crypto.randomInt(0, TEMP_PW_ALPHABET.length)];
   }
   return out;
 }
