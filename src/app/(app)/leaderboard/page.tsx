@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { getTeamName } from "@/lib/nfl-teams";
 
 interface PlayerStanding {
@@ -121,9 +121,8 @@ export default function LeaderboardPage() {
                 <tr><td colSpan={6} className="px-4 py-10 text-center text-gray-600">No players yet</td></tr>
               )}
               {players.map((player, i) => (
-                <>
+                <Fragment key={player.id}>
                   <tr
-                    key={player.id}
                     onClick={() => setExpandedPlayer(expandedPlayer === player.id ? null : player.id)}
                     className="hover:bg-white/5 transition-colors cursor-pointer"
                   >
@@ -159,7 +158,7 @@ export default function LeaderboardPage() {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               ))}
             </tbody>
           </table>
