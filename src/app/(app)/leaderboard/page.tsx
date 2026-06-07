@@ -1,7 +1,6 @@
 "use client";
 
 import { Fragment, useEffect, useState } from "react";
-import { getTeamName } from "@/lib/nfl-teams";
 
 interface PlayerStanding {
   id: string;
@@ -162,7 +161,7 @@ export default function LeaderboardPage() {
                                     pick.result === "LOSS" ? "text-red-400" :
                                     "text-gray-500"
                                   }`}>
-                                    {getTeamName(pick.team)} {pick.result === "WIN" ? "✓" : pick.result === "LOSS" ? "✗" : "–"}
+                                    {pick.team} {pick.result === "WIN" ? "✓" : pick.result === "LOSS" ? "✗" : "–"}
                                   </td>
                                 ))}
                               </tr>
