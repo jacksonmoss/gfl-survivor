@@ -14,9 +14,9 @@ A custom NFL survivor pool web app built for Jackson's league. Replaces Splash S
 
 ```bash
 docker compose up -d          # PostgreSQL on port 5433 (5432 is used by host PG)
-npm run seed                  # Minimal: admin user + 5 invite codes
-npm run seed:demo             # Full demo: 10 players, 3 teams, 3 weeks of data, week 4 upcoming
-npm run dev                   # http://localhost:3000
+pnpm seed                     # Minimal: admin user + 5 invite codes
+pnpm seed:demo                # Full demo: 10 players, 3 teams, 3 weeks of data, week 4 upcoming
+pnpm dev                      # http://localhost:3000
 ```
 
 Demo credentials:
@@ -33,7 +33,8 @@ Demo credentials:
 | ORM | Prisma v7 | Requires `@prisma/adapter-pg` — PrismaClient needs `{ adapter }` constructor arg |
 | DB | PostgreSQL 16 | Docker Compose, port 5433 (host 5432 already in use) |
 | Seed scripts | tsx | `prisma/seed.ts` (minimal), `prisma/seed-demo.ts` (full demo data) |
-| Testing | Vitest | `npm test` to run, `npm run test:watch` for watch mode |
+| Package manager | pnpm v11 | `packageManager` field in package.json; settings in `pnpm-workspace.yaml` |
+| Testing | Vitest | `pnpm test` to run, `pnpm test:watch` for watch mode |
 | Email | nodemailer | SMTP via `SMTP_*` env; console fallback when unconfigured |
 
 ## Prisma v7 Gotchas
@@ -155,9 +156,10 @@ Team ── User[] (members, for team trophy standings)
 - [x] Live score syncing — fetches from ESPN, updates game scores/status in real time
 - [x] Auto-grade picks — picks graded automatically when games go FINAL
 - [x] Client-side live polling — picks page polls every 30s during active game windows
-- [x] Vitest test suite — 39 tests covering NFL teams, ESPN helpers, pick locking, visibility, grading, reset tokens
+- [x] Vitest test suite — 58 tests covering NFL teams, ESPN helpers, pick locking, visibility, grading, reset tokens
 - [x] Season history — leaderboard has a season selector to view any season's final standings + team trophy
 - [x] Password reset — email-based self-service reset (nodemailer/SMTP, console fallback) with admin temp-password reset as last resort
+- [x] pnpm migration — replaced npm with pnpm@11.5.2; settings in `pnpm-workspace.yaml`; `allowBuilds` whitelist blocks unapproved install scripts
 
 ## What Still Needs to Be Done
 
@@ -173,7 +175,7 @@ Team ── User[] (members, for team trophy standings)
 
 ## Testing
 
-Tests use **Vitest** with native tsconfig path resolution. Run with `npm test` or `npm run test:watch`.
+Tests use **Vitest** with native tsconfig path resolution. Run with `pnpm test` or `pnpm test:watch`.
 
 ```
 src/__tests__/
