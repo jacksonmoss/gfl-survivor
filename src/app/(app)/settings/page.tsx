@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 export default function SettingsPage() {
   const [displayName, setDisplayName] = useState("");
+  const [realName, setRealName] = useState("");
   const [email, setEmail] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -15,9 +16,11 @@ export default function SettingsPage() {
 
   useEffect(() => {
     fetch("/api/settings")
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
+        if (!data) return;
         setDisplayName(data.displayName ?? "");
+        setRealName(data.realName ?? "");
         setEmail(data.email ?? "");
         setTeamName(data.team?.name ?? null);
       });
@@ -30,7 +33,7 @@ export default function SettingsPage() {
     const res = await fetch("/api/settings", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ displayName, email }),
+      body: JSON.stringify({ displayName, realName, email }),
     });
     const data = await res.json();
     setProfileMsg(res.ok ? { type: "ok", text: "Saved" } : { type: "err", text: data.error });
@@ -76,6 +79,15 @@ export default function SettingsPage() {
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               required
+              className={input}
+            />
+          </Field>
+          <Field label="Real Name" hint="Your full name shown on the leaderboard. Leave blank to hide.">
+            <input
+              type="text"
+              value={realName}
+              onChange={(e) => setRealName(e.target.value)}
+              placeholder="e.g. Jackson Moss"
               className={input}
             />
           </Field>
