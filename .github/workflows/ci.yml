@@ -56,3 +56,47 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+  # Full dependency vulnerability scan on push to dev/master.
+  # Uploads SARIF to the Security tab and fails the job if vulnerabilities are found.
+  osv-scan:
+    if: ${{ github.event_name == 'push' }}
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@3adb4b14a2b0623876d18d863a498b785fb3752d # v2.3.8
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    with:
+      scan-args: |-
+        -r
+        ./
+
+  # Diff-only scan on PRs — reports only new vulnerabilities introduced by the PR.
+  osv-scan-pr:
+    if: ${{ github.event_name == 'pull_request' }}
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@3adb4b14a2b0623876d18d863a498b785fb3752d # v2.3.8
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    with:
+      scan-args: |-
+        -r
+        ./
+
+  # CodeQL SAST for JavaScript/TypeScript — no build step needed for interpreted languages.
+  # Results appear in Security → Code scanning alerts.
+  codeql:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.x
+      - uses: github/codeql-action/init@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3.36.2
+        with:
+          languages: javascript-typescript
+      - uses: github/codeql-action/analyze@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3.36.2
+        with:
+          category: "/language:javascript-typescript"
