@@ -1,7 +1,6 @@
 "use client";
 
 import { Fragment, useEffect, useState } from "react";
-import { getTeamName } from "@/lib/nfl-teams";
 
 interface PlayerStanding {
   id: string;
@@ -143,20 +142,31 @@ export default function LeaderboardPage() {
                   {(showPicks || expandedPlayer === player.id) && player.picks.length > 0 && (
                     <tr key={`${player.id}-picks`} className="bg-black/20">
                       <td colSpan={6} className="px-4 py-3">
-                        <div className="flex flex-wrap gap-1.5">
-                          {player.picks.sort((a, b) => a.week - b.week).map((pick) => (
-                            <span
-                              key={pick.week}
-                              className={`inline-flex items-center rounded-md px-2 py-1 text-xs border ${
-                                pick.result === "WIN" ? "bg-green-900/30 border-green-800 text-green-300" :
-                                pick.result === "LOSS" ? "bg-red-900/20 border-red-900 text-red-400" :
-                                "bg-white/5 border-white/10 text-gray-400"
-                              }`}
-                            >
-                              {pick.label}: {getTeamName(pick.team)}
-                              {pick.points > 0 && <span className="ml-1 text-gray-500">+{pick.points}</span>}
-                            </span>
-                          ))}
+                        <div className="overflow-x-auto">
+                          <table className="text-xs whitespace-nowrap">
+                            <thead>
+                              <tr>
+                                {player.picks.sort((a, b) => a.week - b.week).map((pick) => (
+                                  <th key={pick.week} className="text-left pr-5 pb-1.5 font-medium text-gray-500 uppercase tracking-wider">
+                                    {pick.label.replace(/^Week (\d+)$/, "Wk $1")}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr>
+                                {player.picks.sort((a, b) => a.week - b.week).map((pick) => (
+                                  <td key={pick.week} className={`pr-5 ${
+                                    pick.result === "WIN" ? "text-green-400" :
+                                    pick.result === "LOSS" ? "text-red-400" :
+                                    "text-gray-500"
+                                  }`}>
+                                    {pick.team} {pick.result === "WIN" ? "✓" : pick.result === "LOSS" ? "✗" : "–"}
+                                  </td>
+                                ))}
+                              </tr>
+                            </tbody>
+                          </table>
                         </div>
                       </td>
                     </tr>
