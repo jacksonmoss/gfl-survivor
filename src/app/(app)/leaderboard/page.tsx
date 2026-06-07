@@ -6,6 +6,7 @@ import { getTeamName } from "@/lib/nfl-teams";
 interface PlayerStanding {
   id: string;
   displayName: string;
+  realName: string | null;
   username: string;
   teamName: string | null;
   points: number;
@@ -128,8 +129,10 @@ export default function LeaderboardPage() {
                   >
                     <td className="px-4 py-3 text-gray-600">{i + 1}</td>
                     <td className="px-4 py-3">
-                      <div className="font-medium">{player.displayName}</div>
-                      {player.teamName && <div className="text-xs text-gray-500">{player.teamName}</div>}
+                      <div className="font-medium">{player.realName ?? player.displayName}</div>
+                      <div className="text-xs text-gray-500">
+                        @{player.username}{player.teamName && ` · ${player.teamName}`}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-right text-green-400 hidden sm:table-cell">{player.wins}</td>
                     <td className="px-4 py-3 text-right text-red-400 hidden sm:table-cell">{player.losses}</td>

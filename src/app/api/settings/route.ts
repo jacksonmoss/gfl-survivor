@@ -10,7 +10,7 @@ export async function GET() {
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { displayName: true, username: true, email: true, teamId: true, team: { select: { name: true } } },
+    select: { displayName: true, realName: true, username: true, email: true, teamId: true, team: { select: { name: true } } },
   });
 
   return NextResponse.json(user);
@@ -20,12 +20,16 @@ export async function PATCH(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { displayName, email, currentPassword, newPassword } = await req.json();
+  const { displayName, realName, email, currentPassword, newPassword } = await req.json();
 
   const updates: Record<string, string | null> = {};
 
   if (displayName) {
     updates.displayName = displayName;
+  }
+
+  if (realName !== undefined) {
+    updates.realName = typeof realName === "string" && realName.trim() !== "" ? realName.trim() : null;
   }
 
   if (email !== undefined) {

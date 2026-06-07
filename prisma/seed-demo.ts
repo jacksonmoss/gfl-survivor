@@ -74,16 +74,16 @@ const WEEK_GAMES = [
 ];
 
 const PLAYER_NAMES = [
-  { username: "jdog", displayName: "Jackson", team: "The Dawgs" },
-  { username: "mike_t", displayName: "Mike T", team: "The Dawgs" },
-  { username: "sara_k", displayName: "Sara", team: "The Dawgs" },
-  { username: "bigben", displayName: "Ben", team: "Gridiron Gang" },
-  { username: "chadwick", displayName: "Chad", team: "Gridiron Gang" },
-  { username: "tommy_b", displayName: "Tommy", team: "Gridiron Gang" },
-  { username: "lucky13", displayName: "Lucky", team: "Lone Wolves" },
-  { username: "ace_v", displayName: "Ace", team: "Lone Wolves" },
-  { username: "queenb", displayName: "Bri", team: null },
-  { username: "zeke99", displayName: "Zeke", team: null },
+  { username: "jdog", displayName: "Jackson", realName: "Jackson Moss", team: "The Dawgs" },
+  { username: "mike_t", displayName: "Mike T", realName: "Mike Thompson", team: "The Dawgs" },
+  { username: "sara_k", displayName: "Sara", realName: "Sara Kim", team: "The Dawgs" },
+  { username: "bigben", displayName: "Ben", realName: "Ben Carter", team: "Gridiron Gang" },
+  { username: "chadwick", displayName: "Chad", realName: "Chad Wick", team: "Gridiron Gang" },
+  { username: "tommy_b", displayName: "Tommy", realName: "Tommy Burke", team: "Gridiron Gang" },
+  { username: "lucky13", displayName: "Lucky", realName: null, team: "Lone Wolves" },
+  { username: "ace_v", displayName: "Ace", realName: "Ace Valdez", team: "Lone Wolves" },
+  { username: "queenb", displayName: "Bri", realName: "Bri Queen", team: null },
+  { username: "zeke99", displayName: "Zeke", realName: null, team: null },
 ];
 
 // Which teams each player picked for weeks 1-3 (some intentionally wrong)
@@ -178,6 +178,7 @@ async function main() {
         username: p.username,
         passwordHash: playerHash,
         displayName: p.displayName,
+        realName: p.realName ?? null,
         role: "PLAYER",
         inviteCodeUsed: invite.code,
         teamId: p.team ? teamMap.get(p.team) ?? null : null,
