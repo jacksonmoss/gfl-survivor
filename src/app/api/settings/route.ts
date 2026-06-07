@@ -37,7 +37,7 @@ export async function PATCH(req: NextRequest) {
     const trimmed = typeof email === "string" ? email.trim().toLowerCase() : "";
     if (trimmed === "") {
       updates.email = null;
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+    } else if (trimmed.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
       return NextResponse.json(
         { error: "Please enter a valid email address" },
         { status: 400 }
