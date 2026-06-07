@@ -143,20 +143,31 @@ export default function LeaderboardPage() {
                   {(showPicks || expandedPlayer === player.id) && player.picks.length > 0 && (
                     <tr key={`${player.id}-picks`} className="bg-black/20">
                       <td colSpan={6} className="px-4 py-3">
-                        <div className="flex flex-wrap gap-1.5">
-                          {player.picks.sort((a, b) => a.week - b.week).map((pick) => (
-                            <span
-                              key={pick.week}
-                              className={`inline-flex items-center rounded-md px-2 py-1 text-xs border ${
-                                pick.result === "WIN" ? "bg-green-900/30 border-green-800 text-green-300" :
-                                pick.result === "LOSS" ? "bg-red-900/20 border-red-900 text-red-400" :
-                                "bg-white/5 border-white/10 text-gray-400"
-                              }`}
-                            >
-                              {pick.label}: {getTeamName(pick.team)}
-                              {pick.points > 0 && <span className="ml-1 text-gray-500">+{pick.points}</span>}
-                            </span>
-                          ))}
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="text-gray-500 uppercase tracking-wider">
+                                <th className="text-left pb-2 pr-6 font-medium">Week</th>
+                                <th className="text-left pb-2 pr-6 font-medium">Team</th>
+                                <th className="text-left pb-2 font-medium">Result</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5">
+                              {player.picks.sort((a, b) => a.week - b.week).map((pick) => (
+                                <tr key={pick.week}>
+                                  <td className="py-1.5 pr-6 text-gray-400">{pick.label}</td>
+                                  <td className="py-1.5 pr-6 text-gray-200">{getTeamName(pick.team)}</td>
+                                  <td className={`py-1.5 font-medium ${
+                                    pick.result === "WIN" ? "text-green-400" :
+                                    pick.result === "LOSS" ? "text-red-400" :
+                                    "text-gray-500"
+                                  }`}>
+                                    {pick.result === "WIN" ? "Win" : pick.result === "LOSS" ? "Loss" : "Pending"}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
                         </div>
                       </td>
                     </tr>
