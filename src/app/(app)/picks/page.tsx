@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { getTeamName } from "@/lib/nfl-teams";
+import Image from "next/image";
+import { getTeamName, getLogoUrl } from "@/lib/nfl-teams";
 
 interface Game {
   id: string;
@@ -160,9 +161,12 @@ export default function PicksPage() {
               currentPick.result === "LOSS" ? "border-red-900 bg-red-900/10" :
               "border-white/10 bg-white/5"
             }`}>
-              <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wider">Your pick</p>
-                <p className="text-base font-semibold mt-0.5">{getTeamName(currentPick.team)}</p>
+              <div className="flex items-center gap-3">
+                <TeamLogo abbr={currentPick.team} size={36} />
+                <div>
+                  <p className="text-xs text-gray-500 uppercase tracking-wider">Your pick</p>
+                  <p className="text-base font-semibold mt-0.5">{getTeamName(currentPick.team)}</p>
+                </div>
               </div>
               <span className={`text-sm font-medium ${resultColor(currentPick.result)}`}>
                 {currentPick.result === "PENDING"
@@ -285,6 +289,21 @@ export default function PicksPage() {
   );
 }
 
+function TeamLogo({ abbr, size = 40 }: { abbr: string; size?: number }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return null;
+  return (
+    <Image
+      src={getLogoUrl(abbr)}
+      alt={abbr}
+      width={size}
+      height={size}
+      onError={() => setFailed(true)}
+      className="object-contain"
+    />
+  );
+}
+
 function TeamSide({
   abbr, isPicked, isUsed, disabled, onPick,
 }: {
@@ -306,8 +325,11 @@ function TeamSide({
           : "hover:bg-white/10 text-gray-200"
       }`}
     >
+      <div className="flex justify-center mb-1.5">
+        <TeamLogo abbr={abbr} size={40} />
+      </div>
       <div className="font-bold text-sm">{abbr}</div>
-      <div className="text-xs mt-1 leading-snug">
+      <div className="text-xs mt-0.5 leading-snug">
         {getTeamName(abbr)}
       </div>
       {isUsed && <div className="mt-1.5 text-xs text-gray-600">Used</div>}

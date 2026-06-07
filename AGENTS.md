@@ -161,11 +161,15 @@ Team ── User[] (members, for team trophy standings)
 
 ## What Still Needs to Be Done
 
-- [ ] **Notifications** — remind users to make their pick before kickoff (email, push, or in-app).
+- [ ] **Notifications** — remind users to make their pick before kickoff via email. Tracked in #27: regular season gets two reminders (before Thursday night kickoff, before the first Sunday kickoff) sent only to users without a pick yet; playoff weeks (19-22) collapse to a single morning-of reminder for the week's first game.
 - [ ] **Deployment** — self-hosted initially; Docker Compose for production with nginx reverse proxy, or move to a managed platform.
 - [ ] **NEXTAUTH_SECRET** — generate a real secret for production (`openssl rand -base64 32`).
 - [ ] **Tie handling** — score sync currently picks the home team as winner on ties. NFL regular season games can't tie (overtime rules), but worth verifying edge cases.
 - [ ] **Pre-existing auth.ts type errors** — `src/lib/auth.ts` has TS errors on lines 39-40 (casting `User | AdapterUser` to `{ username }` / `{ role }`). Works at runtime but fails `tsc --noEmit`. Should add proper type narrowing.
+- [ ] **Leaderboard polish** — #22 missing `key` prop on expanded player rows (shorthand fragment can't carry one — use `Fragment` from `react`); #24 add a `realName` field shown alongside username; #25 redesign the expanded pick history as a table and drop the `+N` point indicator.
+- [ ] **CI security scanning** — #26: add dependency vulnerability scanning (osv-scanner/npm audit) and consider CodeQL/secret scanning to `.github/workflows/ci.yml`, alongside the existing lint/test/build job.
+- [ ] **Mobile testing support** — #28: make the dev server reachable from real devices on the LAN for manual testing (verify `NEXTAUTH_URL`/cookies work from a non-localhost origin); #29: add automated E2E testing (Playwright) covering golden-path flows plus a mobile-viewport suite.
+- [ ] **Session behavior documentation** — #23: JWT sessions persist across app restarts by design (stateless, signed with `NEXTAUTH_SECRET` from `.env`); document this so it isn't mistaken for a bug, and decide whether to set an explicit `session.maxAge`.
 
 ## Testing
 

@@ -38,3 +38,11 @@ export type NFLTeamAbbr = (typeof NFL_TEAMS)[number]["abbr"];
 export function getTeamName(abbr: string): string {
   return NFL_TEAMS.find((t) => t.abbr === abbr)?.name ?? abbr;
 }
+
+// Our abbr → ESPN CDN abbreviation (lowercase). Only WAS differs (ESPN uses WSH).
+const ESPN_LOGO_ABBR: Partial<Record<string, string>> = { WAS: "wsh" };
+
+export function getLogoUrl(abbr: string): string {
+  const espnAbbr = ESPN_LOGO_ABBR[abbr] ?? abbr.toLowerCase();
+  return `https://a.espncdn.com/i/teamlogos/nfl/500/${espnAbbr}.png`;
+}
