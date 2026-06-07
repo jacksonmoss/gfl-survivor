@@ -16,8 +16,9 @@ export default function SettingsPage() {
 
   useEffect(() => {
     fetch("/api/settings")
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
+        if (!data) return;
         setDisplayName(data.displayName ?? "");
         setRealName(data.realName ?? "");
         setEmail(data.email ?? "");

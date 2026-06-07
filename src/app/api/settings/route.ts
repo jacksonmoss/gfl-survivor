@@ -13,6 +13,7 @@ export async function GET() {
     select: { displayName: true, realName: true, username: true, email: true, teamId: true, team: { select: { name: true } } },
   });
 
+  if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
   return NextResponse.json(user);
 }
 
