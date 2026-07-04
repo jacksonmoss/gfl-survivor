@@ -26,6 +26,19 @@ test.describe("Leaderboard", () => {
     await expect(page.getByRole("cell", { name: "KC ✓", exact: true })).toBeVisible();
   });
 
+  test("Show Picks toggle persists across navigation", async ({ page }) => {
+    await loginAs(page, PLAYER1.username, PLAYER1.password);
+    await page.goto("/leaderboard");
+    await expect(page.locator("td").filter({ hasText: "Player One" })).toBeVisible();
+    await page.getByRole("button", { name: "Show Picks" }).click();
+    await expect(page.getByRole("button", { name: "Hide Picks" })).toBeVisible();
+    // Leave the leaderboard and come back — the toggle should still be on
+    await page.goto("/picks");
+    await page.goto("/leaderboard");
+    await expect(page.getByRole("button", { name: "Hide Picks" })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "KC ✓", exact: true })).toBeVisible();
+  });
+
   test("admin sees Team Trophy tab", async ({ page }) => {
     await loginAs(page, ADMIN.username, ADMIN.password);
     await page.goto("/leaderboard");
