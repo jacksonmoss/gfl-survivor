@@ -70,10 +70,12 @@ export default function LeaderboardPage() {
   const [tab, setTab] = useState<"players" | "teams">("players");
   const [showPicks, setShowPicks] = usePersistedToggle(SHOW_PICKS_KEY);
   const [expandedPlayer, setExpandedPlayer] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   function load(id?: string) {
     const url = id ? `/api/leaderboard?seasonId=${id}` : "/api/leaderboard";
     fetch(url).then((r) => r.json()).then((data) => {
+      setLoading(false);
       setPlayers(data.players ?? []);
       setTeams(data.teams ?? []);
       setSeasons(data.seasons ?? []);
@@ -138,8 +140,10 @@ export default function LeaderboardPage() {
         )}
       </div>
 
+      {loading && <LeaderboardSkeleton />}
+
       {/* Players tab */}
-      {tab === "players" && (
+      {!loading && tab === "players" && (
         <div className="rounded-xl border border-white/10 overflow-hidden">
           <table className="w-full text-sm">
             <thead>
@@ -215,7 +219,7 @@ export default function LeaderboardPage() {
       )}
 
       {/* Teams tab */}
-      {tab === "teams" && (
+      {!loading && tab === "teams" && (
         <div className="space-y-3">
           {teams.length === 0 && <p className="text-center py-10 text-gray-600 text-sm">No teams yet</p>}
           {teams.map((team, i) => (
@@ -243,6 +247,23 @@ export default function LeaderboardPage() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function LeaderboardSkeleton() {
+  return (
+    <div className="rounded-xl border border-white/10 overflow-hidden" aria-hidden="true">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="flex items-center gap-4 border-b border-white/5 px-4 py-3.5 last:border-b-0">
+          <div className="h-4 w-4 rounded bg-white/10 animate-pulse" />
+          <div className="flex-1 space-y-1.5">
+            <div className="h-4 w-32 rounded bg-white/10 animate-pulse" />
+            <div className="h-3 w-20 rounded bg-white/10 animate-pulse" />
+          </div>
+          <div className="h-4 w-8 rounded bg-white/10 animate-pulse" />
+        </div>
+      ))}
     </div>
   );
 }

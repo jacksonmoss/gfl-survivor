@@ -20,7 +20,7 @@ export function Navbar() {
     <nav className="border-b border-gray-800 bg-gray-900">
       <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
         <div className="flex items-center gap-6">
-          <Link href="/picks" className="text-lg font-bold tracking-tight">
+          <Link href="/picks" className="text-lg font-bold tracking-tight transition-opacity hover:opacity-80">
             GFL Survivor
           </Link>
 
@@ -67,7 +67,7 @@ export function Navbar() {
 
         {/* Mobile hamburger */}
         <button
-          className="sm:hidden p-2 text-gray-400 hover:text-white"
+          className="sm:hidden p-2 text-gray-400 hover:text-white transition-transform active:scale-90"
           onClick={() => setMenuOpen(!menuOpen)}
         >
           <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -82,7 +82,7 @@ export function Navbar() {
 
       {/* Mobile menu */}
       {menuOpen && (
-        <div className="sm:hidden border-t border-gray-800 pb-3">
+        <div className="sm:hidden border-t border-gray-800 pb-3 animate-fade-in">
           <div className="space-y-1 px-4 pt-2">
             {navLinks.map((link) => (
               <Link

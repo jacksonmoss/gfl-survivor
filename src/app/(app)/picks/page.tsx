@@ -57,11 +57,13 @@ export default function PicksPage() {
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [loading, setLoading] = useState(true);
   const weekRef = useRef<string | null>(null);
 
   const load = useCallback(async (keepWeek = false) => {
     const res = await fetch("/api/picks");
     const data = await res.json();
+    setLoading(false);
     setSeason(data.season);
     setPicks(data.picks);
     setUsedTeams(data.usedTeams);
@@ -98,18 +100,45 @@ export default function PicksPage() {
 
   async function pick(team: string) {
     if (!selectedWeek) return;
+    const week = selectedWeek;
     setSubmitting(true);
     setNotice(null);
+
+    // Optimistic update — reflect the pick instantly, then reconcile with the
+    // server (or roll back on error). The current-pick card keys off the team,
+    // so swapping it remounts and replays the success `animate-pop`.
+    const prevPicks = picks;
+    const prevUsed = usedTeams;
+    const oldTeam = picks.find((p) => p.weekId === week.id)?.team;
+    const optimistic: Pick = {
+      id: `optimistic-${team}`, weekId: week.id, team,
+      result: "PENDING", points: 0, week,
+    };
+    setPicks((cur) => [...cur.filter((p) => p.weekId !== week.id), optimistic]);
+    setUsedTeams((cur) => {
+      const withoutOld = oldTeam ? cur.filter((t) => t !== oldTeam) : cur;
+      return withoutOld.includes(team) ? withoutOld : [...withoutOld, team];
+    });
+
     const res = await fetch("/api/picks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ weekId: selectedWeek.id, team }),
+      body: JSON.stringify({ weekId: week.id, team }),
     });
     const data = await res.json();
-    setNotice(res.ok ? { type: "ok", text: `Picked ${getTeamName(team)}` } : { type: "err", text: data.error });
-    if (res.ok) load();
+    if (res.ok) {
+      setNotice({ type: "ok", text: `Picked ${getTeamName(team)}` });
+      load(true);
+    } else {
+      // Roll back the optimistic update.
+      setPicks(prevPicks);
+      setUsedTeams(prevUsed);
+      setNotice({ type: "err", text: data.error });
+    }
     setSubmitting(false);
   }
+
+  if (loading) return <PicksSkeleton />;
 
   if (!season) {
     return (
@@ -156,7 +185,7 @@ export default function PicksPage() {
         <>
           {/* Current pick summary */}
           {currentPick && (
-            <div className={`rounded-xl border px-4 py-3 flex items-center justify-between ${
+            <div key={currentPick.team} className={`animate-pop rounded-xl border px-4 py-3 flex items-center justify-between ${
               currentPick.result === "WIN" ? "border-green-700 bg-green-900/20" :
               currentPick.result === "LOSS" ? "border-red-900 bg-red-900/10" :
               "border-white/10 bg-white/5"
@@ -285,6 +314,24 @@ export default function PicksPage() {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function PicksSkeleton() {
+  return (
+    <div className="space-y-5" aria-hidden="true">
+      <div className="flex items-center justify-between">
+        <div className="h-6 w-40 rounded bg-white/10 animate-pulse" />
+        <div className="h-5 w-12 rounded bg-white/10 animate-pulse" />
+      </div>
+      <div className="h-10 w-full rounded-lg bg-white/10 animate-pulse" />
+      <div className="h-16 w-full rounded-xl bg-white/10 animate-pulse" />
+      <div className="grid gap-2 sm:grid-cols-2">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="h-32 rounded-xl bg-white/10 animate-pulse" />
+        ))}
+      </div>
     </div>
   );
 }
