@@ -121,6 +121,33 @@ docker compose -p gfl-prod -f docker-compose.prod.yml down          # keep data
 docker compose -p gfl-prod -f docker-compose.prod.yml down -v       # also delete the DB volume
 ```
 
+## Pick reminders (cron)
+
+Pick-deadline reminders are sent by an external scheduler hitting an
+authenticated endpoint — there is no in-app scheduler. Set `CRON_SECRET` in
+`.env.prod` (`openssl rand -hex 32`) and configure SMTP (see [Configure](#configure));
+without SMTP the reminders are logged to the app console instead of emailed.
+
+The endpoint is idempotent per (user, week, reminder slot), so it's safe to call
+often — poll it every ~15 minutes and it emails only when a slot's window is open
+(regular season: ~3h before Thursday night and the first Sunday game; playoffs:
+the morning of the week's first game) and only users who still haven't picked and
+haven't opted out:
+
+```bash
+curl -fsS -X POST https://your-host/api/admin/reminders/send \
+  -H "Authorization: Bearer $CRON_SECRET"
+```
+
+Wire it to whatever scheduler the host provides — a crontab line, a Railway/Render
+cron job, or a GitHub Actions scheduled workflow. Example crontab (every 15 min):
+
+```cron
+*/15 * * * * curl -fsS -X POST https://your-host/api/admin/reminders/send -H "Authorization: Bearer $CRON_SECRET" >/dev/null
+```
+
+Lead time is tunable with `REMINDER_LEAD_HOURS` (default 3).
+
 ### Known gaps (tracked separately)
 
 - **No TLS yet** — nginx serves plain HTTP on port 80 (see [TLS](#tls)). (#40)

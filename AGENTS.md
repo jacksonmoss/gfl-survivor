@@ -85,17 +85,20 @@ src/
 │           ├── invites/            # GET/POST invite codes (admin only)
 │           ├── season/             # GET/POST seasons (admin only)
 │           ├── users/              # GET user list (admin only)
-│           └── reset-password/     # POST — admin generates a temp password for a user (last resort)
+│           ├── reset-password/     # POST — admin generates a temp password for a user (last resort)
+│           └── reminders/send/     # POST — cron-triggered pick reminders (Bearer CRON_SECRET, not session)
 ├── components/
 │   └── navbar.tsx                  # Responsive nav with mobile hamburger menu
 ├── __tests__/
 │   ├── nfl-teams.test.ts           # NFL team data integrity tests
 │   ├── espn.test.ts                # ESPN API helper tests
-│   └── pick-logic.test.ts          # Kickoff locking, visibility, grading, point values
+│   ├── pick-logic.test.ts          # Kickoff locking, visibility, grading, point values
+│   └── reminders.test.ts           # Reminder slot scheduling (Thu/Sun/playoff), due window, recipient filter
 └── lib/
     ├── auth.ts                     # NextAuth config (credentials provider, JWT callbacks)
     ├── mailer.ts                   # nodemailer transport from SMTP_* env; logs to console when unconfigured
     ├── password-reset.ts           # token gen/hash/expiry + temp password generation (pure, tested)
+    ├── reminders.ts                 # pure reminder scheduling: slot computation, due window, email body (tested)
     ├── espn.ts                     # ESPN API helpers: team abbr mapping, URL builder, response types
     ├── types.ts                    # NextAuth session/JWT type augmentation
     ├── prisma.ts                   # Singleton PrismaClient with PrismaPg adapter
@@ -110,10 +113,13 @@ User ──┬── Pick (one per user per week, unique on userId+weekId)
        ├── InviteCode (used one to register)
        ├── InviteCode[] (created, if admin)
        ├── PasswordResetToken[] (single-use, hashed, 1h expiry)
-       └── email (optional, unique; used for password reset)
+       ├── ReminderLog[] (one per user+week+slot; idempotency ledger for pick reminders)
+       ├── email (optional, unique; used for password reset + reminders)
+       └── emailReminders (bool, default true; opt-out toggle in Settings)
 
 Season ── Week[] ── Game[] (NFL games with scores/status)
-                 └── Pick[] (all user picks for that week)
+                 ├── Pick[] (all user picks for that week)
+                 └── ReminderLog[] (reminders sent for that week)
 
 Team ── User[] (members, for team trophy standings)
 ```
@@ -147,6 +153,7 @@ Team ── User[] (members, for team trophy standings)
 - **Auto-grading** — when the score sync detects a game transition to FINAL, it determines the winner and sets all PENDING picks for that game to WIN/LOSS with points based on `week.pointValue`.
 - **Auth rate limiting** — `src/proxy.ts` rate-limits the sensitive auth endpoints by client IP: forgot-password (5/15min), reset-password (10/hour), login credentials callback (10/15min). Over-limit → `429` with `Retry-After`. In-memory fixed-window store in `src/lib/rate-limit.ts` (single-instance only; resets on restart, not shared across replicas). Note: **Next 16 renamed the `middleware` file convention to `proxy`** (`proxy.ts`, exports `proxy()` + `config.matcher`; defaults to the Node.js runtime) — `middleware.ts` is deprecated. Client IP comes from `X-Forwarded-For`/`X-Real-IP`, set by nginx (`deploy/nginx.conf`).
 - **Password reset** — email is optional, set on the Settings page. `/forgot-password` requests a link (always returns success to avoid account enumeration; only sends if the account has an email). Tokens are random 32-byte hex, stored only as a SHA-256 hash, single-use, 1h expiry. `/reset-password?token=` consumes it. Email is sent via `lib/mailer.ts` (SMTP from `SMTP_*` env; logs the link to the console when SMTP is unconfigured). Admins have a last-resort reset in the admin panel that generates a temp password (returned once, never stored) to relay out of band.
+- **Pick reminders** — email nudges to users who still have no pick, sent by an external scheduler (no in-app cron). `POST /api/admin/reminders/send` is authenticated by a `CRON_SECRET` bearer token (constant-time compared), *not* a session, so it can be called by system cron / a hosted scheduler. It resolves the current week (earliest week with a game still to kick off), computes which reminder *slots* are due, and emails opted-in users without a pick. Slot schedule (`src/lib/reminders.ts`, pure + tested): regular season = a **Thursday** slot (~3h before the Thursday-night game) and a **Sunday** slot (~3h before the earliest Sunday game), each skipped if that day has no game; playoffs = a single **morning-of** slot (9am ET on the first game's day, since playoff weekends can start Saturday). Weekday is computed in `America/New_York` — a Thursday-night kickoff is already Friday in UTC, so a naive UTC weekday would misclassify it. Idempotency: a `ReminderLog` row per (user, week, slot) is **claimed before sending** (unique-constraint conflict → skip), so re-running or overlapping cron runs never double-email. Lead time is tunable via `REMINDER_LEAD_HOURS`. Reuses `lib/mailer.ts` (console fallback when SMTP is unconfigured). See the "Pick reminders (cron)" section in `DEPLOYMENT.md`.
 
 ## Workflow
 
@@ -181,11 +188,11 @@ Team ── User[] (members, for team trophy standings)
 - [x] Password reset — email-based self-service reset (nodemailer/SMTP, console fallback) with admin temp-password reset as last resort
 - [x] pnpm migration — replaced npm with pnpm@11.5.2; settings in `pnpm-workspace.yaml`; `allowBuilds` whitelist blocks unapproved install scripts
 - [x] Auth rate limiting (#5) — in-memory fixed-window limiter (`src/lib/rate-limit.ts`) applied via `src/proxy.ts` to forgot-password/reset-password/login; `429` + `Retry-After`. Follow-ups: #45 (login page 429 message), #46 (count failed attempts only).
+- [x] Pick reminders (#7/#27) — cron-triggered email nudges to users without a pick. `POST /api/admin/reminders/send` (Bearer `CRON_SECRET`), phase-aware slots (regular: Thu + first Sunday; playoff: morning-of), opt-out toggle in Settings, idempotent per (user, week, slot) via `ReminderLog`. Logic in `src/lib/reminders.ts`.
 - [x] Production deployment (#4) — multi-stage `Dockerfile` (Next standalone output), `docker-compose.prod.yml` (Postgres + one-shot `migrate` service + app + nginx), `NEXTAUTH_SECRET` fail-fast guard in `src/instrumentation.ts`. See `DEPLOYMENT.md`.
 
 ## What Still Needs to Be Done
 
-- [ ] **Notifications** — remind users to make their pick before kickoff via email. Tracked in #27: regular season gets two reminders (before Thursday night kickoff, before the first Sunday kickoff) sent only to users without a pick yet; playoff weeks (19-22) collapse to a single morning-of reminder for the week's first game.
 - [ ] **Tie handling** — score sync currently picks the home team as winner on ties. NFL regular season games can't tie (overtime rules), but worth verifying edge cases.
 - [ ] **Pre-existing auth.ts type errors** — `src/lib/auth.ts` has TS errors on lines 39-40 (casting `User | AdapterUser` to `{ username }` / `{ role }`). Works at runtime but fails `tsc --noEmit`. Should add proper type narrowing.
 - [ ] **Leaderboard polish** — #22 missing `key` prop on expanded player rows (shorthand fragment can't carry one — use `Fragment` from `react`); #24 add a `realName` field shown alongside username; #25 redesign the expanded pick history as a table and drop the `+N` point indicator.
@@ -202,7 +209,8 @@ src/__tests__/
 ├── nfl-teams.test.ts       # NFL team data integrity, getTeamName lookup
 ├── espn.test.ts            # ESPN abbreviation mapping, week params, URL builder
 ├── pick-logic.test.ts      # Per-game kickoff locking, pick visibility rules, auto-grading, point values
-└── password-reset.test.ts  # Reset token gen/hash/expiry, temp password generation
+├── password-reset.test.ts  # Reset token gen/hash/expiry, temp password generation
+└── reminders.test.ts       # Reminder slots (Thu/Sun/playoff), timezone weekday, due window, recipient filter
 ```
 
 Tests cover the core business logic extracted from API routes: kickoff locking, pick visibility (own picks always visible, admin sees all, others hidden until kickoff), grading (WIN/LOSS determination), and playoff point escalation. API routes themselves are not directly tested (they depend on Prisma/NextAuth) — consider integration tests with a test database for that layer.
