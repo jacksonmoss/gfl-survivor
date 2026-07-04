@@ -13,14 +13,27 @@ function usePersistedToggle(key: string): [boolean, (value: boolean) => void] {
       window.addEventListener("storage", onChange);
       return () => window.removeEventListener("storage", onChange);
     },
-    () => localStorage.getItem(key) === "true",
+    // Accessing localStorage can throw (e.g. Safari "block all cookies", sandboxed
+    // iframes). getSnapshot runs during render, so a throw here would crash the page —
+    // degrade to the default instead.
+    () => {
+      try {
+        return localStorage.getItem(key) === "true";
+      } catch {
+        return false;
+      }
+    },
     () => false,
   );
   const setValue = (next: boolean) => {
-    localStorage.setItem(key, String(next));
-    // The native "storage" event only fires in other tabs; dispatch it here so this
-    // tab's subscriber re-reads the new value.
-    window.dispatchEvent(new StorageEvent("storage", { key }));
+    try {
+      localStorage.setItem(key, String(next));
+      // The native "storage" event only fires in other tabs; dispatch it here so this
+      // tab's subscriber re-reads the new value.
+      window.dispatchEvent(new StorageEvent("storage", { key }));
+    } catch {
+      // Storage unavailable — toggle just won't persist across navigation.
+    }
   };
   return [value, setValue];
 }
