@@ -102,6 +102,7 @@ src/
     ├── espn.ts                     # ESPN API helpers: team abbr mapping, URL builder, response types
     ├── types.ts                    # NextAuth session/JWT type augmentation
     ├── prisma.ts                   # Singleton PrismaClient with PrismaPg adapter
+    ├── teams.ts                    # pure team-name validation (trim/blank/collision/self-rename); route delegates to it (tested)
     └── nfl-teams.ts                # All 32 NFL teams with abbreviations, names, conference, division
 ```
 
@@ -183,7 +184,8 @@ Team ── User[] (members, for team trophy standings)
 - [x] Live score syncing — fetches from ESPN, updates game scores/status in real time
 - [x] Auto-grade picks — picks graded automatically when games go FINAL
 - [x] Client-side live polling — picks page polls every 30s during active game windows
-- [x] Vitest test suite — 58 tests covering NFL teams, ESPN helpers, pick locking, visibility, grading, reset tokens
+- [x] Vitest test suite — unit tests for pure logic extracted to `lib/` (NFL teams, ESPN, pick locking/visibility/grading, reset tokens, reminders, team-name validation)
+- [x] Playwright E2E suite (#29) — `e2e/` drives the real UI (auth, picks, leaderboard, admin, password reset) across `desktop` + `mobile` (iPhone 14) projects; own throwaway `gfl_e2e` DB seeded per run
 - [x] Season history — leaderboard has a season selector to view any season's final standings + team trophy
 - [x] Password reset — email-based self-service reset (nodemailer/SMTP, console fallback) with admin temp-password reset as last resort
 - [x] pnpm migration — replaced npm with pnpm@11.5.2; settings in `pnpm-workspace.yaml`; `allowBuilds` whitelist blocks unapproved install scripts
@@ -197,7 +199,7 @@ Team ── User[] (members, for team trophy standings)
 - [ ] **Pre-existing auth.ts type errors** — `src/lib/auth.ts` has TS errors on lines 39-40 (casting `User | AdapterUser` to `{ username }` / `{ role }`). Works at runtime but fails `tsc --noEmit`. Should add proper type narrowing.
 - [ ] **Leaderboard polish** — #22 missing `key` prop on expanded player rows (shorthand fragment can't carry one — use `Fragment` from `react`); #24 add a `realName` field shown alongside username; #25 redesign the expanded pick history as a table and drop the `+N` point indicator.
 - [ ] **CI security scanning** — #26: add dependency vulnerability scanning (osv-scanner/npm audit) and consider CodeQL/secret scanning to `.github/workflows/ci.yml`, alongside the existing lint/test/build job.
-- [ ] **Mobile testing support** — #28: make the dev server reachable from real devices on the LAN for manual testing (verify `NEXTAUTH_URL`/cookies work from a non-localhost origin); #29: add automated E2E testing (Playwright) covering golden-path flows plus a mobile-viewport suite.
+- [ ] **Mobile testing support** — #28: make the dev server reachable from real devices on the LAN for manual testing (verify `NEXTAUTH_URL`/cookies work from a non-localhost origin). (E2E automation, #29, is done — see the Playwright suite in `e2e/`.)
 - [ ] **Session behavior documentation** — #23: JWT sessions persist across app restarts by design (stateless, signed with `NEXTAUTH_SECRET` from `.env`); document this so it isn't mistaken for a bug, and decide whether to set an explicit `session.maxAge`.
 
 ## Testing
@@ -214,4 +216,26 @@ src/__tests__/
 └── teams.test.ts           # Team name validation (trim, blank, collision, self-rename) — src/lib/teams.ts
 ```
 
-Tests cover the core business logic extracted from API routes: kickoff locking, pick visibility (own picks always visible, admin sees all, others hidden until kickoff), grading (WIN/LOSS determination), and playoff point escalation. API routes themselves are not directly tested (they depend on Prisma/NextAuth) — consider integration tests with a test database for that layer.
+These cover the core business logic extracted from API routes: kickoff locking, pick visibility (own picks always visible, admin sees all, others hidden until kickoff), grading (WIN/LOSS determination), playoff point escalation, and team-name validation. **When you add or change logic, extract it to a `lib/` helper and unit-test it in the same change — don't leave it inline in the route and don't defer coverage to a follow-up ticket.** API routes aren't unit-tested directly (they depend on Prisma/NextAuth); the E2E suite exercises them through the UI instead.
+
+### End-to-end (Playwright)
+
+The `e2e/` suite drives the **real UI** in a browser — use it (or extend a spec) when a change touches a page/flow.
+
+```
+e2e/
+├── global-setup.ts     # drops/recreates a throwaway `gfl_e2e` DB, runs migrate deploy + seed-e2e
+├── helpers.ts          # ADMIN/PLAYER1 creds, loginAs(page, ...)
+├── auth.spec.ts        # login/register/logout
+├── picks.spec.ts       # pick submit/change/lock
+├── leaderboard.spec.ts # standings + team trophy
+├── z-admin.spec.ts     # admin panel: invites, season create, team create + rename
+├── password-reset.spec.ts
+└── mobile.spec.ts      # runs only under the `mobile` project (iPhone 14 viewport)
+```
+
+- Run all: `pnpm test:e2e` (Playwright's `webServer` runs `PORT=3001 pnpm start`, so **a production build must exist** — run `pnpm build` first; `reuseExistingServer` is on outside CI).
+- One spec/test: `pnpm exec playwright test z-admin.spec.ts --project=desktop -g "rename a team"`.
+- Two projects (`playwright.config.ts`): `desktop` (Desktop Chrome, ignores `mobile.spec.ts`) and `mobile` (Chromium with iPhone 14 viewport, only `mobile.spec.ts`).
+- Vitest ignores `e2e/**`; the E2E DB (`gfl_e2e`) is separate from the dev DB and rebuilt on every run, so tests can freely create/rename/delete.
+- Selector gotcha: a team name renders both as a roster-card `<span>` **and** as an `<option>` in the "Assign Player" `<select>` — scope UI assertions to the card (e.g. filter by the card's Rename button) so `getByText` doesn't match two elements.
