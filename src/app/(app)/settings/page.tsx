@@ -6,6 +6,7 @@ export default function SettingsPage() {
   const [displayName, setDisplayName] = useState("");
   const [realName, setRealName] = useState("");
   const [email, setEmail] = useState("");
+  const [emailReminders, setEmailReminders] = useState(true);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -22,6 +23,7 @@ export default function SettingsPage() {
         setDisplayName(data.displayName ?? "");
         setRealName(data.realName ?? "");
         setEmail(data.email ?? "");
+        setEmailReminders(data.emailReminders ?? true);
         setTeamName(data.team?.name ?? null);
       });
   }, []);
@@ -33,7 +35,7 @@ export default function SettingsPage() {
     const res = await fetch("/api/settings", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ displayName, realName, email }),
+      body: JSON.stringify({ displayName, realName, email, emailReminders }),
     });
     const data = await res.json();
     setProfileMsg(res.ok ? { type: "ok", text: "Saved" } : { type: "err", text: data.error });
@@ -100,6 +102,20 @@ export default function SettingsPage() {
               className={input}
             />
           </Field>
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={emailReminders}
+              onChange={(e) => setEmailReminders(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-white/20 bg-white/5 accent-blue-600"
+            />
+            <span className="text-sm text-gray-300">
+              Email me pick reminders
+              <span className="block text-xs text-gray-500">
+                Get a nudge before kickoff when you haven&apos;t picked yet. Requires an email above.
+              </span>
+            </span>
+          </label>
           {teamName && (
             <Field label="Team">
               <div className="flex items-center h-10 px-3 rounded-lg border border-white/10 bg-white/5 text-sm text-gray-300">
