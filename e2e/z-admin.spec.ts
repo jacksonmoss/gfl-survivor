@@ -22,6 +22,41 @@ test.describe("Admin panel", () => {
     await expect(page.locator("text=New invite code")).toBeVisible();
   });
 
+  test("admin can rename a team", async ({ page }) => {
+    await loginAs(page, ADMIN.username, ADMIN.password);
+    await page.goto("/admin");
+    await page.getByRole("button", { name: "Teams" }).click();
+
+    // distinct stamps so neither name is a substring of the other
+    const stamp = Date.now();
+    const original = `E2E Orig ${stamp}`;
+    const renamed = `E2E New ${stamp}`;
+
+    // the team's roster card has a Rename button; the "Assign Player" card
+    // (which also lists the name in a <select>) does not — filter on that.
+    const rosterCard = (name: string) =>
+      page
+        .locator("div.rounded-xl")
+        .filter({ has: page.getByRole("button", { name: "Rename" }) })
+        .filter({ hasText: name });
+
+    // create a throwaway team to rename
+    await page.getByPlaceholder("Team name").fill(original);
+    await page.getByRole("button", { name: "Create", exact: true }).click();
+    await expect(rosterCard(original)).toBeVisible();
+
+    // open the inline editor and rename it
+    await rosterCard(original).getByRole("button", { name: "Rename" }).click();
+    const editing = page
+      .locator("div.rounded-xl")
+      .filter({ has: page.getByRole("button", { name: "Save" }) });
+    await editing.getByRole("textbox").fill(renamed);
+    await editing.getByRole("button", { name: "Save" }).click();
+
+    await expect(rosterCard(renamed)).toBeVisible();
+    await expect(rosterCard(original)).toHaveCount(0);
+  });
+
   test("admin can create a new season", async ({ page }) => {
     await loginAs(page, ADMIN.username, ADMIN.password);
     await page.goto("/admin");
