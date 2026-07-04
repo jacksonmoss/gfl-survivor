@@ -147,6 +147,16 @@ Team ── User[] (members, for team trophy standings)
 - **Auto-grading** — when the score sync detects a game transition to FINAL, it determines the winner and sets all PENDING picks for that game to WIN/LOSS with points based on `week.pointValue`.
 - **Password reset** — email is optional, set on the Settings page. `/forgot-password` requests a link (always returns success to avoid account enumeration; only sends if the account has an email). Tokens are random 32-byte hex, stored only as a SHA-256 hash, single-use, 1h expiry. `/reset-password?token=` consumes it. Email is sent via `lib/mailer.ts` (SMTP from `SMTP_*` env; logs the link to the console when SMTP is unconfigured). Admins have a last-resort reset in the admin panel that generates a temp password (returned once, never stored) to relay out of band.
 
+## Workflow
+
+- **Open follow-up tickets for known gaps.** When finishing a task, note any
+  out-of-scope work you came across (deferred hardening, TODOs, edge cases, gaps
+  the change exposes). **After the PR is created**, open a GitHub issue for each —
+  with a description, acceptance criteria, and implementation hints — and note it
+  was split out of the parent issue. Link them where the gap is documented (e.g. a
+  "Known gaps" list in the relevant doc) so they're traceable rather than lost in
+  the PR discussion. See #4 → #40/#41/#42/#43 for the pattern.
+
 ## What's Done
 
 - [x] Docker Compose + PostgreSQL
