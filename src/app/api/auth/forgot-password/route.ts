@@ -38,6 +38,13 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // Opportunistic cleanup: purge this user's expired tokens so they don't
+    // accumulate. Expired tokens are already rejected at use time; this just
+    // keeps the table tidy without needing a cron job.
+    await prisma.passwordResetToken.deleteMany({
+      where: { userId: user.id, expiresAt: { lt: new Date() } },
+    });
+
     const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
     const resetUrl = `${baseUrl}/reset-password?token=${token}`;
 
