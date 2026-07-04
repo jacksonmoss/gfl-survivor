@@ -61,8 +61,16 @@ export default function PicksPage() {
   const weekRef = useRef<string | null>(null);
 
   const load = useCallback(async (keepWeek = false) => {
-    const res = await fetch("/api/picks");
-    const data = await res.json();
+    let data;
+    try {
+      const res = await fetch("/api/picks");
+      data = await res.json();
+    } catch {
+      // Network/parse error — stop the skeleton and fall through to the
+      // "No active season" state rather than spinning forever.
+      setLoading(false);
+      return;
+    }
     setLoading(false);
     setSeason(data.season);
     setPicks(data.picks);

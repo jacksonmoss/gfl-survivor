@@ -80,6 +80,10 @@ export default function LeaderboardPage() {
       setTeams(data.teams ?? []);
       setSeasons(data.seasons ?? []);
       if (data.season) setSeasonId(data.season.id);
+    }).catch(() => {
+      // Network/parse error — stop the skeleton and fall through to the empty
+      // "No players yet" state rather than spinning forever.
+      setLoading(false);
     });
   }
 
