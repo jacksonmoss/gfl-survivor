@@ -10,7 +10,6 @@ export default function SettingsPage() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [teamName, setTeamName] = useState<string | null>(null);
   const [profileMsg, setProfileMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [pwMsg, setPwMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -24,7 +23,6 @@ export default function SettingsPage() {
         setRealName(data.realName ?? "");
         setEmail(data.email ?? "");
         setEmailReminders(data.emailReminders ?? true);
-        setTeamName(data.team?.name ?? null);
       });
   }, []);
 
@@ -116,13 +114,6 @@ export default function SettingsPage() {
               </span>
             </span>
           </label>
-          {teamName && (
-            <Field label="Team">
-              <div className="flex items-center h-10 px-3 rounded-lg border border-white/10 bg-white/5 text-sm text-gray-300">
-                {teamName}
-              </div>
-            </Field>
-          )}
           {profileMsg && <Feedback msg={profileMsg} />}
           <button type="submit" disabled={loading} className={btn}>
             Save Profile
