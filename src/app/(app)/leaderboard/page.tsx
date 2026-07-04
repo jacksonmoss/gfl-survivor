@@ -1,6 +1,29 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useState, useSyncExternalStore } from "react";
+
+const SHOW_PICKS_KEY = "leaderboard:showPicks";
+
+// Persist the picks toggle in localStorage so it survives navigating away and back
+// within the session. useSyncExternalStore keeps SSR (false) and client in sync without
+// a hydration mismatch and without calling setState in an effect.
+function usePersistedToggle(key: string): [boolean, (value: boolean) => void] {
+  const value = useSyncExternalStore(
+    (onChange) => {
+      window.addEventListener("storage", onChange);
+      return () => window.removeEventListener("storage", onChange);
+    },
+    () => localStorage.getItem(key) === "true",
+    () => false,
+  );
+  const setValue = (next: boolean) => {
+    localStorage.setItem(key, String(next));
+    // The native "storage" event only fires in other tabs; dispatch it here so this
+    // tab's subscriber re-reads the new value.
+    window.dispatchEvent(new StorageEvent("storage", { key }));
+  };
+  return [value, setValue];
+}
 
 interface PlayerStanding {
   id: string;
@@ -32,7 +55,7 @@ export default function LeaderboardPage() {
   const [seasons, setSeasons] = useState<SeasonOption[]>([]);
   const [seasonId, setSeasonId] = useState("");
   const [tab, setTab] = useState<"players" | "teams">("players");
-  const [showPicks, setShowPicks] = useState(false);
+  const [showPicks, setShowPicks] = usePersistedToggle(SHOW_PICKS_KEY);
   const [expandedPlayer, setExpandedPlayer] = useState<string | null>(null);
 
   function load(id?: string) {
@@ -90,7 +113,7 @@ export default function LeaderboardPage() {
         </div>
         {tab === "players" && (
           <button
-            onClick={() => setShowPicks((v) => !v)}
+            onClick={() => setShowPicks(!showPicks)}
             className={`text-xs px-3 py-1.5 rounded-lg border transition-all mb-1 ${
               showPicks
                 ? "border-blue-500 bg-blue-900/30 text-blue-300"
