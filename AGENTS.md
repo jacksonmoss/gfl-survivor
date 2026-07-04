@@ -210,7 +210,8 @@ src/__tests__/
 ├── espn.test.ts            # ESPN abbreviation mapping, week params, URL builder
 ├── pick-logic.test.ts      # Per-game kickoff locking, pick visibility rules, auto-grading, point values
 ├── password-reset.test.ts  # Reset token gen/hash/expiry, temp password generation
-└── reminders.test.ts       # Reminder slots (Thu/Sun/playoff), timezone weekday, due window, recipient filter
+├── reminders.test.ts       # Reminder slots (Thu/Sun/playoff), timezone weekday, due window, recipient filter
+└── teams.test.ts           # Team name validation (trim, blank, collision, self-rename) — src/lib/teams.ts
 ```
 
 Tests cover the core business logic extracted from API routes: kickoff locking, pick visibility (own picks always visible, admin sees all, others hidden until kickoff), grading (WIN/LOSS determination), and playoff point escalation. API routes themselves are not directly tested (they depend on Prisma/NextAuth) — consider integration tests with a test database for that layer.

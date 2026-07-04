@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { validateTeamName } from "@/lib/teams";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -30,14 +31,11 @@ export async function POST(req: NextRequest) {
   const { action, teamName, teamId, userId } = await req.json();
 
   if (action === "create") {
-    if (!teamName?.trim()) {
-      return NextResponse.json({ error: "Team name is required" }, { status: 400 });
-    }
-    const existing = await prisma.team.findUnique({ where: { name: teamName.trim() } });
-    if (existing) {
-      return NextResponse.json({ error: "Team name already taken" }, { status: 400 });
-    }
-    const team = await prisma.team.create({ data: { name: teamName.trim() } });
+    const trimmed = teamName?.trim();
+    const existing = trimmed ? await prisma.team.findUnique({ where: { name: trimmed } }) : null;
+    const check = validateTeamName(teamName, existing);
+    if (!check.ok) return NextResponse.json({ error: check.error }, { status: 400 });
+    const team = await prisma.team.create({ data: { name: check.name } });
     return NextResponse.json(team);
   }
 
@@ -45,14 +43,11 @@ export async function POST(req: NextRequest) {
     if (!teamId) {
       return NextResponse.json({ error: "teamId required" }, { status: 400 });
     }
-    if (!teamName?.trim()) {
-      return NextResponse.json({ error: "Team name is required" }, { status: 400 });
-    }
-    const existing = await prisma.team.findUnique({ where: { name: teamName.trim() } });
-    if (existing && existing.id !== teamId) {
-      return NextResponse.json({ error: "Team name already taken" }, { status: 400 });
-    }
-    const team = await prisma.team.update({ where: { id: teamId }, data: { name: teamName.trim() } });
+    const trimmed = teamName?.trim();
+    const existing = trimmed ? await prisma.team.findUnique({ where: { name: trimmed } }) : null;
+    const check = validateTeamName(teamName, existing, teamId);
+    if (!check.ok) return NextResponse.json({ error: check.error }, { status: 400 });
+    const team = await prisma.team.update({ where: { id: teamId }, data: { name: check.name } });
     return NextResponse.json(team);
   }
 
