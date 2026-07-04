@@ -42,6 +42,8 @@ export default function AdminPage() {
   const [teamMsg, setTeamMsg] = useState("");
   const [assignUserId, setAssignUserId] = useState("");
   const [assignTeamId, setAssignTeamId] = useState("");
+  const [renameTeamId, setRenameTeamId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
 
   // Season tab
   const [newYear, setNewYear] = useState(new Date().getFullYear());
@@ -147,6 +149,26 @@ export default function AdminPage() {
       body: JSON.stringify({ action: "unassign", userId }),
     });
     await loadAll();
+    setLoading(false);
+  }
+
+  async function renameTeam(teamId: string) {
+    if (!renameValue.trim()) return;
+    setLoading(true);
+    setTeamMsg("");
+    const res = await fetch("/api/teams", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "rename", teamId, teamName: renameValue.trim() }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setRenameTeamId(null);
+      setRenameValue("");
+      await loadAll();
+    } else {
+      setTeamMsg(data.error);
+    }
     setLoading(false);
   }
 
@@ -370,15 +392,58 @@ export default function AdminPage() {
             {teams.length === 0 && <p className="text-gray-500 text-sm">No teams yet.</p>}
             {teams.map((team) => (
               <div key={team.id} className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">{team.name}</span>
-                  <button
-                    onClick={() => deleteTeam(team.id)}
-                    disabled={loading}
-                    className="text-xs text-red-500 hover:text-red-400 transition-colors"
-                  >
-                    Delete
-                  </button>
+                <div className="flex items-center justify-between gap-2">
+                  {renameTeamId === team.id ? (
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        renameTeam(team.id);
+                      }}
+                      className="flex flex-1 gap-2"
+                    >
+                      <input
+                        type="text"
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        autoFocus
+                        className={`${input} flex-1`}
+                      />
+                      <button type="submit" disabled={loading || !renameValue.trim()} className={btn}>
+                        Save
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRenameTeamId(null)}
+                        disabled={loading}
+                        className="text-xs text-gray-400 hover:text-gray-300 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </form>
+                  ) : (
+                    <>
+                      <span className="font-medium">{team.name}</span>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => {
+                            setRenameTeamId(team.id);
+                            setRenameValue(team.name);
+                          }}
+                          disabled={loading}
+                          className="text-xs text-gray-400 hover:text-gray-200 transition-colors"
+                        >
+                          Rename
+                        </button>
+                        <button
+                          onClick={() => deleteTeam(team.id)}
+                          disabled={loading}
+                          className="text-xs text-red-500 hover:text-red-400 transition-colors"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {team.members.length === 0 && <span className="text-xs text-gray-600">No members</span>}

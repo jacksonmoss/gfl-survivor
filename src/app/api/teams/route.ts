@@ -41,6 +41,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(team);
   }
 
+  if (action === "rename") {
+    if (!teamId) {
+      return NextResponse.json({ error: "teamId required" }, { status: 400 });
+    }
+    if (!teamName?.trim()) {
+      return NextResponse.json({ error: "Team name is required" }, { status: 400 });
+    }
+    const existing = await prisma.team.findUnique({ where: { name: teamName.trim() } });
+    if (existing && existing.id !== teamId) {
+      return NextResponse.json({ error: "Team name already taken" }, { status: 400 });
+    }
+    const team = await prisma.team.update({ where: { id: teamId }, data: { name: teamName.trim() } });
+    return NextResponse.json(team);
+  }
+
   if (action === "assign") {
     if (!teamId || !userId) {
       return NextResponse.json({ error: "teamId and userId required" }, { status: 400 });
