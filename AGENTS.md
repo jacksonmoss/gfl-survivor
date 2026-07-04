@@ -198,7 +198,6 @@ Team ── User[] (members, for team trophy standings)
 ## What Still Needs to Be Done
 
 - [ ] **Tie handling** — score sync currently picks the home team as winner on ties. NFL regular season games can't tie (overtime rules), but worth verifying edge cases.
-- [ ] **Leaderboard polish** — #22 missing `key` prop on expanded player rows (shorthand fragment can't carry one — use `Fragment` from `react`); #24 add a `realName` field shown alongside username; #25 redesign the expanded pick history as a table and drop the `+N` point indicator.
 - [ ] **CI security scanning** — #26: add dependency vulnerability scanning (osv-scanner/npm audit) and consider CodeQL/secret scanning to `.github/workflows/ci.yml`, alongside the existing lint/test/build job.
 - [ ] **Mobile testing support** — #28: make the dev server reachable from real devices on the LAN for manual testing (verify `NEXTAUTH_URL`/cookies work from a non-localhost origin). (E2E automation, #29, is done — see the Playwright suite in `e2e/`.)
 - [ ] **Session behavior documentation** — #23: JWT sessions persist across app restarts by design (stateless, signed with `NEXTAUTH_SECRET` from `.env`); document this so it isn't mistaken for a bug, and decide whether to set an explicit `session.maxAge`.
