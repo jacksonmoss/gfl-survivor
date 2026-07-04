@@ -145,6 +145,7 @@ Team ── User[] (members, for team trophy standings)
 - **ESPN integration** — uses ESPN's public scoreboard API (`site.api.espn.com`). Team abbreviation mapping in `src/lib/espn.ts` (ESPN uses "WSH", we use "WAS"). Games are matched via `externalId` (ESPN event ID) stored on the Game model.
 - **Live score polling** — picks page auto-polls every 30s when games are live/started. Calls `/api/scores/sync` (rate-limited to 1 call per 30s globally) then re-fetches picks data. The sync endpoint is accessible to any authenticated user.
 - **Auto-grading** — when the score sync detects a game transition to FINAL, it determines the winner and sets all PENDING picks for that game to WIN/LOSS with points based on `week.pointValue`.
+- **Auth rate limiting** — `src/proxy.ts` rate-limits the sensitive auth endpoints by client IP: forgot-password (5/15min), reset-password (10/hour), login credentials callback (10/15min). Over-limit → `429` with `Retry-After`. In-memory fixed-window store in `src/lib/rate-limit.ts` (single-instance only; resets on restart, not shared across replicas). Note: **Next 16 renamed the `middleware` file convention to `proxy`** (`proxy.ts`, exports `proxy()` + `config.matcher`; defaults to the Node.js runtime) — `middleware.ts` is deprecated. Client IP comes from `X-Forwarded-For`/`X-Real-IP`, set by nginx (`deploy/nginx.conf`).
 - **Password reset** — email is optional, set on the Settings page. `/forgot-password` requests a link (always returns success to avoid account enumeration; only sends if the account has an email). Tokens are random 32-byte hex, stored only as a SHA-256 hash, single-use, 1h expiry. `/reset-password?token=` consumes it. Email is sent via `lib/mailer.ts` (SMTP from `SMTP_*` env; logs the link to the console when SMTP is unconfigured). Admins have a last-resort reset in the admin panel that generates a temp password (returned once, never stored) to relay out of band.
 
 ## Workflow
@@ -179,6 +180,7 @@ Team ── User[] (members, for team trophy standings)
 - [x] Season history — leaderboard has a season selector to view any season's final standings + team trophy
 - [x] Password reset — email-based self-service reset (nodemailer/SMTP, console fallback) with admin temp-password reset as last resort
 - [x] pnpm migration — replaced npm with pnpm@11.5.2; settings in `pnpm-workspace.yaml`; `allowBuilds` whitelist blocks unapproved install scripts
+- [x] Auth rate limiting (#5) — in-memory fixed-window limiter (`src/lib/rate-limit.ts`) applied via `src/proxy.ts` to forgot-password/reset-password/login; `429` + `Retry-After`. Follow-ups: #45 (login page 429 message), #46 (count failed attempts only).
 - [x] Production deployment (#4) — multi-stage `Dockerfile` (Next standalone output), `docker-compose.prod.yml` (Postgres + one-shot `migrate` service + app + nginx), `NEXTAUTH_SECRET` fail-fast guard in `src/instrumentation.ts`. See `DEPLOYMENT.md`.
 
 ## What Still Needs to Be Done
