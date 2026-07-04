@@ -45,6 +45,15 @@ Prisma v7 has breaking changes from v5/v6:
 - **Generated client output** is at `src/generated/prisma/client.ts` — import from `@/generated/prisma/client`
 - **Seed scripts** need `import "dotenv/config"` at top since env vars aren't auto-loaded
 
+## Deployment
+
+Production is Docker: `Dockerfile` (multi-stage) + `docker-compose.prod.yml` (Postgres + one-shot `migrate` service + app + nginx). Full instructions in `DEPLOYMENT.md`. Non-obvious constraints learned building this:
+- **Node 24** everywhere (`engines`/`.nvmrc`) — not the `node:20` you'll see in generic Next Docker guides.
+- **Debian `bookworm-slim`, not Alpine** — the Prisma schema engine used by `migrate deploy` is the glibc/openssl3 build; Alpine (musl) would force a runtime engine download. `openssl` must be `apt-get install`ed (slim images omit it) or Prisma warns and misdetects libssl.
+- **The app runner needs no Prisma engine** — the `@prisma/adapter-pg` driver adapter is pure JS, so the standalone runner stays slim (~390MB) and only the `migrator` stage carries the toolchain (~1.4GB).
+- **Migrations run as a separate one-shot service**, not a per-replica entrypoint — the app waits on `depends_on: condition: service_completed_successfully`. This also sidesteps copying pnpm's symlinked store into the slim runner.
+- **`NEXTAUTH_SECRET` fail-fast** lives in `src/instrumentation.ts` (`register()` runs once before serving); it throws in production if the secret is missing.
+
 ## Project Structure
 
 ```
@@ -160,12 +169,11 @@ Team ── User[] (members, for team trophy standings)
 - [x] Season history — leaderboard has a season selector to view any season's final standings + team trophy
 - [x] Password reset — email-based self-service reset (nodemailer/SMTP, console fallback) with admin temp-password reset as last resort
 - [x] pnpm migration — replaced npm with pnpm@11.5.2; settings in `pnpm-workspace.yaml`; `allowBuilds` whitelist blocks unapproved install scripts
+- [x] Production deployment (#4) — multi-stage `Dockerfile` (Next standalone output), `docker-compose.prod.yml` (Postgres + one-shot `migrate` service + app + nginx), `NEXTAUTH_SECRET` fail-fast guard in `src/instrumentation.ts`. See `DEPLOYMENT.md`.
 
 ## What Still Needs to Be Done
 
 - [ ] **Notifications** — remind users to make their pick before kickoff via email. Tracked in #27: regular season gets two reminders (before Thursday night kickoff, before the first Sunday kickoff) sent only to users without a pick yet; playoff weeks (19-22) collapse to a single morning-of reminder for the week's first game.
-- [ ] **Deployment** — self-hosted initially; Docker Compose for production with nginx reverse proxy, or move to a managed platform.
-- [ ] **NEXTAUTH_SECRET** — generate a real secret for production (`openssl rand -base64 32`).
 - [ ] **Tie handling** — score sync currently picks the home team as winner on ties. NFL regular season games can't tie (overtime rules), but worth verifying edge cases.
 - [ ] **Pre-existing auth.ts type errors** — `src/lib/auth.ts` has TS errors on lines 39-40 (casting `User | AdapterUser` to `{ username }` / `{ role }`). Works at runtime but fails `tsc --noEmit`. Should add proper type narrowing.
 - [ ] **Leaderboard polish** — #22 missing `key` prop on expanded player rows (shorthand fragment can't carry one — use `Fragment` from `react`); #24 add a `realName` field shown alongside username; #25 redesign the expanded pick history as a table and drop the `+N` point indicator.
