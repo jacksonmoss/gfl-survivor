@@ -23,8 +23,18 @@ cp .env.prod.example .env.prod
 ## Run
 
 ```bash
-docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+docker compose -p gfl-prod -f docker-compose.prod.yml --env-file .env.prod up -d --build
 ```
+
+> **Use a distinct project name (`-p gfl-prod`).** The dev stack
+> (`docker-compose.yml`) and this prod stack both default their Compose project
+> name to the directory (`gfl`), which means they'd **share the `gfl_pgdata`
+> volume**. If you run the prod stack without `-p` on a machine that has ever run
+> the dev stack, Postgres reuses the dev volume (initialized with the dev
+> password) and migrations fail with `P1000: Authentication failed`. Pick a name
+> and keep using it for every `docker compose` command against this stack, or set
+> `COMPOSE_PROJECT_NAME=gfl-prod` in `.env.prod`. All commands below assume
+> `-p gfl-prod`.
 
 Startup order is enforced by Compose:
 
@@ -36,7 +46,7 @@ Startup order is enforced by Compose:
 Seed an initial admin + invite codes once the stack is up:
 
 ```bash
-docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm migrate pnpm seed
+docker compose -p gfl-prod -f docker-compose.prod.yml --env-file .env.prod run --rm migrate pnpm seed
 ```
 
 (The `migrate` image carries the full toolchain, so it can also run seed scripts.)
@@ -76,3 +86,46 @@ correct absolute callback URLs behind the proxy.
 The same Dockerfile works on any container platform. Point the build at the
 `runner` target, run `prisma migrate deploy` as a release/pre-deploy command, and
 set `DATABASE_URL`, `NEXTAUTH_URL`, and `NEXTAUTH_SECRET` as service env vars.
+
+## Operational notes
+
+All commands assume `-p gfl-prod` (see the note under [Run](#run)).
+
+**Update / redeploy** — rebuild and recreate; the `migrate` service reruns and
+applies any new migrations before the app restarts:
+
+```bash
+git pull
+docker compose -p gfl-prod -f docker-compose.prod.yml --env-file .env.prod up -d --build
+```
+
+**Logs / status:**
+
+```bash
+docker compose -p gfl-prod -f docker-compose.prod.yml ps
+docker compose -p gfl-prod -f docker-compose.prod.yml logs -f app
+```
+
+**Back up / restore the database** — state lives in the `gfl-prod_pgdata`
+volume; back it up on a schedule (nothing does this automatically yet):
+
+```bash
+docker compose -p gfl-prod -f docker-compose.prod.yml --env-file .env.prod \
+  exec db pg_dump -U gfl gfl > backup-$(date +%F).sql
+```
+
+**Stop / tear down:**
+
+```bash
+docker compose -p gfl-prod -f docker-compose.prod.yml down          # keep data
+docker compose -p gfl-prod -f docker-compose.prod.yml down -v       # also delete the DB volume
+```
+
+### Known gaps (tracked separately)
+
+- **No TLS yet** — nginx serves plain HTTP on port 80 (see [TLS](#tls)). (#40)
+- **nginx starts before the app is ready** — `depends_on` waits for the app
+  container to start, not for it to accept requests; there is no app healthcheck
+  yet, so the first requests after a deploy can 502 briefly. (#41)
+- **The Dockerfile isn't built in CI**, so it can silently break between deploys. (#42)
+- **No automated DB backups** — the `pg_dump` above is manual. (#43)
