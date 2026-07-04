@@ -32,6 +32,10 @@ const RULES: { path: string; prefix: string; config: RateLimitConfig }[] = [
 ];
 
 export function proxy(request: NextRequest) {
+  // Escape hatch for the E2E suite, which logs in far more often than a human
+  // would and shares one client IP. Never set this in production.
+  if (process.env.RATE_LIMIT_DISABLED === "true") return NextResponse.next();
+
   // Only the submission (POST) matters; NextAuth also GETs the callback path.
   if (request.method !== "POST") return NextResponse.next();
 

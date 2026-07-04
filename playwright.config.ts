@@ -45,6 +45,9 @@ export default defineConfig({
       DATABASE_URL: E2E_DB_URL,
       NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET ?? "e2e-test-secret-32chars-minimum!",
       NEXTAUTH_URL: "http://localhost:3001",
+      // The suite logs in on every test from one IP; disable auth rate limiting
+      // so it doesn't trip the login limit (see src/proxy.ts, issue #5).
+      RATE_LIMIT_DISABLED: "true",
     },
   },
 });
