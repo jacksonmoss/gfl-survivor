@@ -68,7 +68,7 @@ src/
 │   │   ├── layout.tsx              # Checks session, redirects if not logged in, renders Navbar
 │   │   ├── picks/page.tsx          # Main pick page — week dropdown, team grid, pick history, live polling
 │   │   ├── leaderboard/page.tsx    # Player standings + team trophy tab (respects pick visibility)
-│   │   ├── settings/page.tsx       # Profile, password change, team management
+│   │   ├── settings/page.tsx       # Profile (display/real name, email, reminders), password change
 │   │   └── admin/page.tsx          # Season creation, invite codes, schedule import, score sync (ADMIN only)
 │   └── api/
 │       ├── auth/[...nextauth]/     # NextAuth handler
@@ -175,7 +175,7 @@ Team ── User[] (members, for team trophy standings)
 - [x] Invite-only registration
 - [x] Pick page with per-game kickoff locking
 - [x] Leaderboard (player standings + team trophy)
-- [x] Settings page (display name, password change, team management)
+- [x] Settings page (display name, real name, email, reminders, password change; team management is admin-only)
 - [x] Admin panel (season creation, invite codes)
 - [x] Mobile-responsive UI across all pages
 - [x] Demo seed data (10 players, 3 teams, 3 completed weeks, 1 upcoming week)
