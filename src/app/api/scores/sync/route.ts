@@ -5,6 +5,10 @@ import { prisma } from "@/lib/prisma";
 import { getESPNWeekParams, buildESPNUrl } from "@/lib/espn";
 import type { ESPNResponse } from "@/lib/espn";
 import { computeAllGameUpdates } from "@/lib/score-sync";
+import { Prisma } from "@/generated/prisma/client";
+import { getStadium } from "@/lib/stadiums";
+import { buildOpenMeteoUrl, parseWeatherResponse, shouldFetchWeather } from "@/lib/weather";
+import type { GameWeather } from "@/lib/weather";
 
 let lastSyncTime = 0;
 const SYNC_COOLDOWN_MS = 30_000;
@@ -99,5 +103,38 @@ export async function POST() {
     }
   }
 
-  return NextResponse.json({ synced, graded, week: currentWeek.weekNumber });
+  // Refresh weather for outdoor games in the lookahead window. Cached in
+  // Game.weatherJson and gated by shouldFetchWeather, so we don't re-hit
+  // Open-Meteo on every 30s poll. Failures are swallowed per-game so a weather
+  // outage never breaks score syncing or blanks the cards.
+  const statusById = new Map(updates.map((u) => [u.gameId, u.status]));
+  const nowDate = new Date();
+  const toFetch = currentWeek.games.filter((game) => {
+    const stadium = getStadium(game.homeTeam);
+    if (!stadium) return false;
+    const existing = game.weatherJson as GameWeather | null;
+    return shouldFetchWeather(
+      { indoor: stadium.indoor, status: statusById.get(game.id) ?? game.status, kickoff: game.kickoff },
+      existing?.fetched_at ?? null,
+      nowDate,
+    );
+  });
+
+  const weatherResults = await Promise.allSettled(
+    toFetch.map(async (game) => {
+      const stadium = getStadium(game.homeTeam)!;
+      const wres = await fetch(buildOpenMeteoUrl(stadium.lat, stadium.lon, game.kickoff));
+      if (!wres.ok) return;
+      const weather = parseWeatherResponse(await wres.json(), game.kickoff, nowDate);
+      if (!weather) return;
+      await prisma.game.update({
+        where: { id: game.id },
+        data: { weatherJson: weather as unknown as Prisma.InputJsonValue },
+      });
+      return true;
+    }),
+  );
+  const weatherUpdated = weatherResults.filter((r) => r.status === "fulfilled" && r.value).length;
+
+  return NextResponse.json({ synced, graded, weather: weatherUpdated, week: currentWeek.weekNumber });
 }

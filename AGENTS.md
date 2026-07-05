@@ -100,6 +100,8 @@ src/
     ├── password-reset.ts           # token gen/hash/expiry + temp password generation (pure, tested)
     ├── reminders.ts                 # pure reminder scheduling: slot computation, due window, email body (tested)
     ├── espn.ts                     # ESPN API helpers: team abbr mapping, URL builder, response types
+    ├── stadiums.ts                 # 32 NFL stadiums: lat/lon + indoor flag (dome/retractable) — for weather (tested)
+    ├── weather.ts                  # pure Open-Meteo helpers: URL builder, forecast parse, cache staleness, display format (tested)
     ├── types.ts                    # NextAuth session/JWT type augmentation
     ├── prisma.ts                   # Singleton PrismaClient with PrismaPg adapter
     ├── teams.ts                    # pure team-name validation (trim/blank/collision/self-rename); route delegates to it (tested)
@@ -118,7 +120,7 @@ User ──┬── Pick (one per user per week, unique on userId+weekId)
        ├── email (optional, unique; used for password reset + reminders)
        └── emailReminders (bool, default true; opt-out toggle in Settings)
 
-Season ── Week[] ── Game[] (NFL games with scores/status)
+Season ── Week[] ── Game[] (NFL games with scores/status + cached weatherJson)
                  ├── Pick[] (all user picks for that week)
                  └── ReminderLog[] (reminders sent for that week)
 
@@ -154,6 +156,7 @@ Team ── User[] (members, for team trophy standings)
 - **ESPN integration** — uses ESPN's public scoreboard API (`site.api.espn.com`). Team abbreviation mapping in `src/lib/espn.ts` (ESPN uses "WSH", we use "WAS"). Games are matched via `externalId` (ESPN event ID) stored on the Game model.
 - **Live score polling** — picks page auto-polls every 30s when games are live/started. Calls `/api/scores/sync` (rate-limited to 1 call per 30s globally) then re-fetches picks data. The sync endpoint is accessible to any authenticated user.
 - **Auto-grading** — when the score sync detects a game transition to FINAL, it determines the winner and sets all PENDING picks for that game to WIN/LOSS with points based on `week.pointValue`.
+- **Game-day weather** (#16) — outdoor matchup cards show a forecast (`☁ 41°F · Wind 22mph NW · 70% precip`); indoor stadiums show a `🏟️ Dome` symbol instead (never blank). Source is [Open-Meteo](https://open-meteo.com/) (free, no key). Stadium coords + indoor flag are a static table in `src/lib/stadiums.ts` — **retractable roofs (ARI, ATL, DAL, HOU, IND) and fixed roofs (SoFi = LAR/LAC, DET, LV, MIN, NO) count as indoor**; SEA (Lumen) and MetLife (NYG/NYJ) are **open-air** (the ticket's "SEA retractable" was wrong — Lumen only roofs the seats). Forecasts are fetched in the score-sync route for outdoor games within 72h of kickoff, cached in `Game.weatherJson` and refreshed at most every ~3h (`shouldFetchWeather`), so it's not re-fetched on every poll. Fetch failures are swallowed per-game (`Promise.allSettled`) so weather never breaks score sync or blanks a card. The picks page fires one sync on mount so weather populates before kickoff (ESPN stays rate-limited, weather stays cache-gated). Pure logic (URL build, forecast parse, staleness, compass/icon/format) lives in `src/lib/weather.ts` and is unit-tested; the dome indicator is derived client-side from the stadium table, so it needs no DB round-trip.
 - **Auth rate limiting** — `src/proxy.ts` rate-limits the sensitive auth endpoints by client IP: forgot-password (5/15min), reset-password (10/hour), login credentials callback (10/15min). Over-limit → `429` with `Retry-After`. In-memory fixed-window store in `src/lib/rate-limit.ts` (single-instance only; resets on restart, not shared across replicas). Note: **Next 16 renamed the `middleware` file convention to `proxy`** (`proxy.ts`, exports `proxy()` + `config.matcher`; defaults to the Node.js runtime) — `middleware.ts` is deprecated. Client IP comes from `X-Forwarded-For`/`X-Real-IP`, set by nginx (`deploy/nginx.conf`).
 - **Password reset** — email is optional, set on the Settings page. `/forgot-password` requests a link (always returns success to avoid account enumeration; only sends if the account has an email). Tokens are random 32-byte hex, stored only as a SHA-256 hash, single-use, 1h expiry. `/reset-password?token=` consumes it. Email is sent via `lib/mailer.ts` (SMTP from `SMTP_*` env; logs the link to the console when SMTP is unconfigured). Admins have a last-resort reset in the admin panel that generates a temp password (returned once, never stored) to relay out of band.
 - **Pick reminders** — email nudges to users who still have no pick, sent by an external scheduler (no in-app cron). `POST /api/admin/reminders/send` is authenticated by a `CRON_SECRET` bearer token (constant-time compared), *not* a session, so it can be called by system cron / a hosted scheduler. It resolves the current week (earliest week with a game still to kick off), computes which reminder *slots* are due, and emails opted-in users without a pick. Slot schedule (`src/lib/reminders.ts`, pure + tested): regular season = a **Thursday** slot (~3h before the Thursday-night game) and a **Sunday** slot (~3h before the earliest Sunday game), each skipped if that day has no game; playoffs = a single **morning-of** slot (9am ET on the first game's day, since playoff weekends can start Saturday). Weekday is computed in `America/New_York` — a Thursday-night kickoff is already Friday in UTC, so a naive UTC weekday would misclassify it. Idempotency: a `ReminderLog` row per (user, week, slot) is **claimed before sending** (unique-constraint conflict → skip), so re-running or overlapping cron runs never double-email. Lead time is tunable via `REMINDER_LEAD_HOURS`. Reuses `lib/mailer.ts` (console fallback when SMTP is unconfigured). See the "Pick reminders (cron)" section in `DEPLOYMENT.md`.
@@ -184,6 +187,7 @@ Team ── User[] (members, for team trophy standings)
 - [x] Pick visibility — other users' picks hidden until their game kicks off; admins see all
 - [x] NFL schedule import — admin can import from ESPN by week or all at once
 - [x] Live score syncing — fetches from ESPN, updates game scores/status in real time
+- [x] Game-day weather (#16) — Open-Meteo forecast on outdoor matchup cards, `🏟️ Dome` for indoor; cached in `Game.weatherJson`, refreshed in the score-sync route (corrected SEA to open-air)
 - [x] Auto-grade picks — picks graded automatically when games go FINAL
 - [x] Client-side live polling — picks page polls every 30s during active game windows
 - [x] Vitest test suite — unit tests for pure logic extracted to `lib/` (NFL teams, ESPN, pick locking/visibility/grading, reset tokens, reminders, team-name validation)
@@ -215,6 +219,8 @@ src/__tests__/
 ├── pick-logic.test.ts      # Per-game kickoff locking, pick visibility rules, auto-grading, point values
 ├── password-reset.test.ts  # Reset token gen/hash/expiry, temp password generation
 ├── reminders.test.ts       # Reminder slots (Thu/Sun/playoff), timezone weekday, due window, recipient filter
+├── stadiums.test.ts        # Stadium table integrity, exact indoor set (SEA outdoor regression) — src/lib/stadiums.ts
+├── weather.test.ts         # Open-Meteo URL/parse, cache staleness, compass/icon/format — src/lib/weather.ts
 └── teams.test.ts           # Team name validation (trim, blank, collision, self-rename) — src/lib/teams.ts
 ```
 
