@@ -29,8 +29,10 @@ test.describe("Picks", () => {
   test("can submit a pick for a future game", async ({ page }) => {
     await page.getByRole("button", { name: /SF/ }).click();
     await page.waitForResponse("/api/picks");
-    // Current pick summary banner appears
-    await expect(page.locator("text=Your pick")).toBeVisible();
+    // Current pick summary banner appears. Scope to the exact banner label so we
+    // don't also match the picked team button's "✓ Your pick" badge (the
+    // optimistic update renders both immediately).
+    await expect(page.getByText("Your pick", { exact: true })).toBeVisible();
     // Week 2 in the selector should now show a pending bullet
     const weekOption = page.locator("select option").filter({ hasText: "Week 2" });
     await expect(weekOption).toContainText("•");

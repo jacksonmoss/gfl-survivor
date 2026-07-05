@@ -142,7 +142,8 @@ Team ── User[] (members, for team trophy standings)
 
 ## Design Decisions
 
-- **Dark theme** — gray-950/900/800 backgrounds, consistent across all pages
+- **Dark theme** — gray-950/900/800 backgrounds, consistent across all pages. **Dark-only, locked in the root layout** (`bg-gray-950 text-white` on `<body>`) — this is the single source of truth. Do *not* reintroduce a `prefers-color-scheme`-driven `body { background }` in `globals.css`: it's un-layered, so it overrides Tailwind v4's layered utilities and turns the whole app white in light-mode browsers.
+- **Motion / design system** (#12) — Tailwind-only, no external animation library. Custom keyframes (`fade-in`, `fade-in-up`, `pop`) are registered as `animate-*` utilities in `globals.css` and are **transform/opacity-only** (GPU compositor, no layout/paint); skeleton loaders reuse the built-in `animate-pulse`. Everything is disabled under `prefers-reduced-motion` via a global override in `globals.css`, so motion never costs low-end/mobile devices. Route-change fade lives in `(app)/template.tsx` (a template re-mounts on navigation, replaying its mount animation below the persistent Navbar). Cards are flat-dark `border-white/10 bg-white/5`; shared auth input/button classes live in `src/lib/ui.ts` so login/register match the in-app style. The picks page does an **optimistic** pick update (instant reflect, rollback on error) with a `pop` on the current-pick card.
 - **Mobile-first responsive** — hamburger nav, card layouts on mobile, tables on desktop
 - **Week selector** — dropdown `<select>` with status indicators (checkmark=win, X=loss, bullet=pending)
 - **Admin role** — only admins see the Admin nav link; API routes check `session.user.role === "ADMIN"`
@@ -194,6 +195,7 @@ Team ── User[] (members, for team trophy standings)
 - [x] Pick reminders (#7/#27) — cron-triggered email nudges to users without a pick. `POST /api/admin/reminders/send` (Bearer `CRON_SECRET`), phase-aware slots (regular: Thu + first Sunday; playoff: morning-of), opt-out toggle in Settings, idempotent per (user, week, slot) via `ReminderLog`. Logic in `src/lib/reminders.ts`.
 - [x] Production deployment (#4) — multi-stage `Dockerfile` (Next standalone output), `docker-compose.prod.yml` (Postgres + one-shot `migrate` service + app + nginx), `NEXTAUTH_SECRET` fail-fast guard in `src/instrumentation.ts`. See `DEPLOYMENT.md`.
 - [x] Leaderboard picks toggle (#10) — "Show Picks" toggle (off by default) reveals every player's weekly picks at once; also supports per-row click-to-expand. State persists across navigation via `localStorage` (`usePersistedToggle`). Server-side visibility rules unchanged (`api/leaderboard` filters by kickoff).
+- [x] Design system + animations (#12) — Tailwind-only motion system (route-change fade via `(app)/template.tsx`, button press feedback, optimistic pick submit with success `pop`, loading skeletons on picks/leaderboard), consistent flat-dark cards (auth pages harmonized via `src/lib/ui.ts`), and a dark-theme lock in the root layout. GPU-friendly + `prefers-reduced-motion`-aware. Follow-ups: #61 (harmonize forgot/reset-password pages), #62 (admin panel skeletons + press feedback).
 
 ## What Still Needs to Be Done
 

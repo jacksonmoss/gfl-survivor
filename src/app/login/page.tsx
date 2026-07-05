@@ -4,6 +4,7 @@ import { signIn } from "next-auth/react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { authInput, authButton } from "@/lib/ui";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -32,15 +33,15 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-sm space-y-6">
+      <div className="w-full max-w-sm space-y-6 animate-fade-in-up">
         <div className="text-center">
           <h1 className="text-3xl font-bold tracking-tight">GFL Survivor</h1>
           <p className="mt-2 text-gray-400">Sign in to your account</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-6">
           {error && (
-            <div className="rounded-md bg-red-900/50 border border-red-700 p-3 text-sm text-red-300">
+            <div className="rounded-lg bg-red-900/50 border border-red-700 p-3 text-sm text-red-300">
               {error}
             </div>
           )}
@@ -54,7 +55,7 @@ export default function LoginPage() {
               name="username"
               type="text"
               required
-              className="mt-1 block w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className={authInput}
             />
           </div>
 
@@ -67,14 +68,14 @@ export default function LoginPage() {
               name="password"
               type="password"
               required
-              className="mt-1 block w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className={authInput}
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-md bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            className={authButton}
           >
             {loading ? "Signing in..." : "Sign in"}
           </button>
