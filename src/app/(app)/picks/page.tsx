@@ -3,6 +3,9 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import Image from "next/image";
 import { getTeamName, getLogoUrl } from "@/lib/nfl-teams";
+import { isIndoorStadium } from "@/lib/stadiums";
+import { formatWeather, weatherIcon } from "@/lib/weather";
+import type { GameWeather } from "@/lib/weather";
 
 interface Game {
   id: string;
@@ -12,6 +15,7 @@ interface Game {
   awayScore: number | null;
   status: string;
   kickoff: string;
+  weatherJson: GameWeather | null;
 }
 
 interface Week {
@@ -89,8 +93,16 @@ export default function PicksPage() {
   }, []);
 
   useEffect(() => {
-    const id = setTimeout(load, 0);
-    return () => clearTimeout(id);
+    let cancelled = false;
+    (async () => {
+      await load();
+      // Kick a single sync so weather (and any live scores) populate even
+      // before a game has started — the sync route caches weather in the DB,
+      // so this stays cheap (ESPN is rate-limited, forecasts refresh ~3h).
+      await fetch("/api/scores/sync", { method: "POST" }).catch(() => {});
+      if (!cancelled) load(true);
+    })();
+    return () => { cancelled = true; };
   }, [load]);
 
   useEffect(() => {
@@ -229,6 +241,10 @@ export default function PicksPage() {
               <div className="grid gap-2 sm:grid-cols-2">
                 {selectedWeek.games.map((game) => {
                   const gameLocked = new Date() >= new Date(game.kickoff);
+                  const indoor = isIndoorStadium(game.homeTeam);
+                  // Hide the forecast once the game is final — the cached
+                  // forecast is pre-game and would read as stale/current.
+                  const weather = game.status === "FINAL" ? null : game.weatherJson;
                   const awayPicked = currentPick?.team === game.awayTeam;
                   const homePicked = currentPick?.team === game.homeTeam;
                   const awayUsed = usedTeams.includes(game.awayTeam) && !awayPicked;
@@ -274,6 +290,17 @@ export default function PicksPage() {
                           </span>
                         )}
                       </div>
+                      {/* Weather strip — dome symbol for indoor, forecast for outdoor.
+                          Renders nothing outdoors when the forecast isn't cached yet. */}
+                      {(indoor || weather) && (
+                        <div className="border-t border-white/5 px-3 py-1 text-center text-[11px] text-gray-500">
+                          {indoor ? (
+                            <span title="Indoor stadium — weather not a factor">🏟️ Dome</span>
+                          ) : (
+                            <span>{weatherIcon(weather!.code)} {formatWeather(weather!)}</span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}

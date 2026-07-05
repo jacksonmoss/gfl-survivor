@@ -110,6 +110,9 @@ model Game {
   status     GameStatus @default(SCHEDULED)
   kickoff    DateTime
   externalId String?    @unique
+  // Cached Open-Meteo forecast for outdoor games; null for domes / not-yet-fetched.
+  // Shape: GameWeather in src/lib/weather.ts ({ temp_f, wind_mph, wind_dir, precip_chance, code, fetched_at }).
+  weatherJson Json?
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
 }

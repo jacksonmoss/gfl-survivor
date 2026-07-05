@@ -5,9 +5,16 @@ import { prisma } from "@/lib/prisma";
 import { getESPNWeekParams, buildESPNUrl } from "@/lib/espn";
 import type { ESPNResponse } from "@/lib/espn";
 import { computeAllGameUpdates } from "@/lib/score-sync";
+import { Prisma } from "@/generated/prisma/client";
+import { getStadium } from "@/lib/stadiums";
+import { buildOpenMeteoUrl, parseWeatherResponse, shouldFetchWeather } from "@/lib/weather";
+import type { GameWeather } from "@/lib/weather";
 
 let lastSyncTime = 0;
 const SYNC_COOLDOWN_MS = 30_000;
+// Cap every external call so a slow upstream can't hang the sync handler
+// (which the picks page polls every 30s during live games).
+const FETCH_TIMEOUT_MS = 10_000;
 
 export async function POST() {
   const session = await getServerSession(authOptions);
@@ -46,7 +53,12 @@ export async function POST() {
   const { seasonType, espnWeek } = getESPNWeekParams(currentWeek.weekNumber, currentWeek.isPlayoff);
   const url = buildESPNUrl(activeSeason.year, seasonType, espnWeek);
 
-  const res = await fetch(url);
+  let res: Response;
+  try {
+    res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+  } catch {
+    return NextResponse.json({ error: "ESPN API unreachable" }, { status: 502 });
+  }
   if (!res.ok) {
     return NextResponse.json({ error: `ESPN API returned ${res.status}` }, { status: 502 });
   }
@@ -99,5 +111,40 @@ export async function POST() {
     }
   }
 
-  return NextResponse.json({ synced, graded, week: currentWeek.weekNumber });
+  // Refresh weather for outdoor games in the lookahead window. Cached in
+  // Game.weatherJson and gated by shouldFetchWeather, so we don't re-hit
+  // Open-Meteo on every 30s poll. Failures are swallowed per-game so a weather
+  // outage never breaks score syncing or blanks the cards.
+  const statusById = new Map(updates.map((u) => [u.gameId, u.status]));
+  const nowDate = new Date();
+  const toFetch = currentWeek.games.filter((game) => {
+    const stadium = getStadium(game.homeTeam);
+    if (!stadium) return false;
+    const existing = game.weatherJson as GameWeather | null;
+    return shouldFetchWeather(
+      { indoor: stadium.indoor, status: statusById.get(game.id) ?? game.status, kickoff: game.kickoff },
+      existing?.fetched_at ?? null,
+      nowDate,
+    );
+  });
+
+  const weatherResults = await Promise.allSettled(
+    toFetch.map(async (game) => {
+      const stadium = getStadium(game.homeTeam)!;
+      const wres = await fetch(buildOpenMeteoUrl(stadium.lat, stadium.lon, game.kickoff), {
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+      if (!wres.ok) return;
+      const weather = parseWeatherResponse(await wres.json(), game.kickoff, nowDate);
+      if (!weather) return;
+      await prisma.game.update({
+        where: { id: game.id },
+        data: { weatherJson: weather as unknown as Prisma.InputJsonValue },
+      });
+      return true;
+    }),
+  );
+  const weatherUpdated = weatherResults.filter((r) => r.status === "fulfilled" && r.value).length;
+
+  return NextResponse.json({ synced, graded, weather: weatherUpdated, week: currentWeek.weekNumber });
 }
