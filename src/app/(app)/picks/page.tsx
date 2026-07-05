@@ -242,7 +242,9 @@ export default function PicksPage() {
                 {selectedWeek.games.map((game) => {
                   const gameLocked = new Date() >= new Date(game.kickoff);
                   const indoor = isIndoorStadium(game.homeTeam);
-                  const weather = game.weatherJson;
+                  // Hide the forecast once the game is final — the cached
+                  // forecast is pre-game and would read as stale/current.
+                  const weather = game.status === "FINAL" ? null : game.weatherJson;
                   const awayPicked = currentPick?.team === game.awayTeam;
                   const homePicked = currentPick?.team === game.homeTeam;
                   const awayUsed = usedTeams.includes(game.awayTeam) && !awayPicked;

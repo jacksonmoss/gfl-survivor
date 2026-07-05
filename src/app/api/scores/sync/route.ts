@@ -12,6 +12,9 @@ import type { GameWeather } from "@/lib/weather";
 
 let lastSyncTime = 0;
 const SYNC_COOLDOWN_MS = 30_000;
+// Cap every external call so a slow upstream can't hang the sync handler
+// (which the picks page polls every 30s during live games).
+const FETCH_TIMEOUT_MS = 10_000;
 
 export async function POST() {
   const session = await getServerSession(authOptions);
@@ -50,7 +53,12 @@ export async function POST() {
   const { seasonType, espnWeek } = getESPNWeekParams(currentWeek.weekNumber, currentWeek.isPlayoff);
   const url = buildESPNUrl(activeSeason.year, seasonType, espnWeek);
 
-  const res = await fetch(url);
+  let res: Response;
+  try {
+    res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+  } catch {
+    return NextResponse.json({ error: "ESPN API unreachable" }, { status: 502 });
+  }
   if (!res.ok) {
     return NextResponse.json({ error: `ESPN API returned ${res.status}` }, { status: 502 });
   }
@@ -123,7 +131,9 @@ export async function POST() {
   const weatherResults = await Promise.allSettled(
     toFetch.map(async (game) => {
       const stadium = getStadium(game.homeTeam)!;
-      const wres = await fetch(buildOpenMeteoUrl(stadium.lat, stadium.lon, game.kickoff));
+      const wres = await fetch(buildOpenMeteoUrl(stadium.lat, stadium.lon, game.kickoff), {
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
       if (!wres.ok) return;
       const weather = parseWeatherResponse(await wres.json(), game.kickoff, nowDate);
       if (!weather) return;
