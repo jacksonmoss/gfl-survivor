@@ -3,6 +3,9 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import Image from "next/image";
 import { getTeamName, getLogoUrl } from "@/lib/nfl-teams";
+import { isIndoorStadium } from "@/lib/stadiums";
+import { formatWeather, weatherIcon } from "@/lib/weather";
+import type { GameWeather } from "@/lib/weather";
 
 interface Game {
   id: string;
@@ -12,6 +15,7 @@ interface Game {
   awayScore: number | null;
   status: string;
   kickoff: string;
+  weatherJson: GameWeather | null;
 }
 
 interface Week {
@@ -57,11 +61,21 @@ export default function PicksPage() {
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [loading, setLoading] = useState(true);
   const weekRef = useRef<string | null>(null);
 
   const load = useCallback(async (keepWeek = false) => {
-    const res = await fetch("/api/picks");
-    const data = await res.json();
+    let data;
+    try {
+      const res = await fetch("/api/picks");
+      data = await res.json();
+    } catch {
+      // Network/parse error — stop the skeleton and fall through to the
+      // "No active season" state rather than spinning forever.
+      setLoading(false);
+      return;
+    }
+    setLoading(false);
     setSeason(data.season);
     setPicks(data.picks);
     setUsedTeams(data.usedTeams);
@@ -79,8 +93,16 @@ export default function PicksPage() {
   }, []);
 
   useEffect(() => {
-    const id = setTimeout(load, 0);
-    return () => clearTimeout(id);
+    let cancelled = false;
+    (async () => {
+      await load();
+      // Kick a single sync so weather (and any live scores) populate even
+      // before a game has started — the sync route caches weather in the DB,
+      // so this stays cheap (ESPN is rate-limited, forecasts refresh ~3h).
+      await fetch("/api/scores/sync", { method: "POST" }).catch(() => {});
+      if (!cancelled) load(true);
+    })();
+    return () => { cancelled = true; };
   }, [load]);
 
   useEffect(() => {
@@ -98,18 +120,45 @@ export default function PicksPage() {
 
   async function pick(team: string) {
     if (!selectedWeek) return;
+    const week = selectedWeek;
     setSubmitting(true);
     setNotice(null);
+
+    // Optimistic update — reflect the pick instantly, then reconcile with the
+    // server (or roll back on error). The current-pick card keys off the team,
+    // so swapping it remounts and replays the success `animate-pop`.
+    const prevPicks = picks;
+    const prevUsed = usedTeams;
+    const oldTeam = picks.find((p) => p.weekId === week.id)?.team;
+    const optimistic: Pick = {
+      id: `optimistic-${team}`, weekId: week.id, team,
+      result: "PENDING", points: 0, week,
+    };
+    setPicks((cur) => [...cur.filter((p) => p.weekId !== week.id), optimistic]);
+    setUsedTeams((cur) => {
+      const withoutOld = oldTeam ? cur.filter((t) => t !== oldTeam) : cur;
+      return withoutOld.includes(team) ? withoutOld : [...withoutOld, team];
+    });
+
     const res = await fetch("/api/picks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ weekId: selectedWeek.id, team }),
+      body: JSON.stringify({ weekId: week.id, team }),
     });
     const data = await res.json();
-    setNotice(res.ok ? { type: "ok", text: `Picked ${getTeamName(team)}` } : { type: "err", text: data.error });
-    if (res.ok) load();
+    if (res.ok) {
+      setNotice({ type: "ok", text: `Picked ${getTeamName(team)}` });
+      load(true);
+    } else {
+      // Roll back the optimistic update.
+      setPicks(prevPicks);
+      setUsedTeams(prevUsed);
+      setNotice({ type: "err", text: data.error });
+    }
     setSubmitting(false);
   }
+
+  if (loading) return <PicksSkeleton />;
 
   if (!season) {
     return (
@@ -156,7 +205,7 @@ export default function PicksPage() {
         <>
           {/* Current pick summary */}
           {currentPick && (
-            <div className={`rounded-xl border px-4 py-3 flex items-center justify-between ${
+            <div key={currentPick.team} className={`animate-pop rounded-xl border px-4 py-3 flex items-center justify-between ${
               currentPick.result === "WIN" ? "border-green-700 bg-green-900/20" :
               currentPick.result === "LOSS" ? "border-red-900 bg-red-900/10" :
               "border-white/10 bg-white/5"
@@ -192,6 +241,10 @@ export default function PicksPage() {
               <div className="grid gap-2 sm:grid-cols-2">
                 {selectedWeek.games.map((game) => {
                   const gameLocked = new Date() >= new Date(game.kickoff);
+                  const indoor = isIndoorStadium(game.homeTeam);
+                  // Hide the forecast once the game is final — the cached
+                  // forecast is pre-game and would read as stale/current.
+                  const weather = game.status === "FINAL" ? null : game.weatherJson;
                   const awayPicked = currentPick?.team === game.awayTeam;
                   const homePicked = currentPick?.team === game.homeTeam;
                   const awayUsed = usedTeams.includes(game.awayTeam) && !awayPicked;
@@ -237,6 +290,17 @@ export default function PicksPage() {
                           </span>
                         )}
                       </div>
+                      {/* Weather strip — dome symbol for indoor, forecast for outdoor.
+                          Renders nothing outdoors when the forecast isn't cached yet. */}
+                      {(indoor || weather) && (
+                        <div className="border-t border-white/5 px-3 py-1 text-center text-[11px] text-gray-500">
+                          {indoor ? (
+                            <span title="Indoor stadium — weather not a factor">🏟️ Dome</span>
+                          ) : (
+                            <span>{weatherIcon(weather!.code)} {formatWeather(weather!)}</span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -285,6 +349,24 @@ export default function PicksPage() {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function PicksSkeleton() {
+  return (
+    <div className="space-y-5" aria-hidden="true">
+      <div className="flex items-center justify-between">
+        <div className="h-6 w-40 rounded bg-white/10 animate-pulse" />
+        <div className="h-5 w-12 rounded bg-white/10 animate-pulse" />
+      </div>
+      <div className="h-10 w-full rounded-lg bg-white/10 animate-pulse" />
+      <div className="h-16 w-full rounded-xl bg-white/10 animate-pulse" />
+      <div className="grid gap-2 sm:grid-cols-2">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="h-32 rounded-xl bg-white/10 animate-pulse" />
+        ))}
+      </div>
     </div>
   );
 }

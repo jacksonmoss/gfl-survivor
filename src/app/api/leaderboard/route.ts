@@ -58,6 +58,7 @@ export async function GET(req: NextRequest) {
     return {
       id: u.id,
       displayName: u.displayName,
+      realName: u.realName ?? null,
       username: u.username,
       teamName: u.team?.name ?? null,
       points,

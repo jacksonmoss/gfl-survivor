@@ -1,11 +1,47 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
-import { getTeamName } from "@/lib/nfl-teams";
+import { Fragment, useEffect, useState, useSyncExternalStore } from "react";
+
+const SHOW_PICKS_KEY = "leaderboard:showPicks";
+
+// Persist the picks toggle in localStorage so it survives navigating away and back
+// within the session. useSyncExternalStore keeps SSR (false) and client in sync without
+// a hydration mismatch and without calling setState in an effect.
+function usePersistedToggle(key: string): [boolean, (value: boolean) => void] {
+  const value = useSyncExternalStore(
+    (onChange) => {
+      window.addEventListener("storage", onChange);
+      return () => window.removeEventListener("storage", onChange);
+    },
+    // Accessing localStorage can throw (e.g. Safari "block all cookies", sandboxed
+    // iframes). getSnapshot runs during render, so a throw here would crash the page —
+    // degrade to the default instead.
+    () => {
+      try {
+        return localStorage.getItem(key) === "true";
+      } catch {
+        return false;
+      }
+    },
+    () => false,
+  );
+  const setValue = (next: boolean) => {
+    try {
+      localStorage.setItem(key, String(next));
+      // The native "storage" event only fires in other tabs; dispatch it here so this
+      // tab's subscriber re-reads the new value.
+      window.dispatchEvent(new StorageEvent("storage", { key }));
+    } catch {
+      // Storage unavailable — toggle just won't persist across navigation.
+    }
+  };
+  return [value, setValue];
+}
 
 interface PlayerStanding {
   id: string;
   displayName: string;
+  realName: string | null;
   username: string;
   teamName: string | null;
   points: number;
@@ -32,16 +68,22 @@ export default function LeaderboardPage() {
   const [seasons, setSeasons] = useState<SeasonOption[]>([]);
   const [seasonId, setSeasonId] = useState("");
   const [tab, setTab] = useState<"players" | "teams">("players");
-  const [showPicks, setShowPicks] = useState(false);
+  const [showPicks, setShowPicks] = usePersistedToggle(SHOW_PICKS_KEY);
   const [expandedPlayer, setExpandedPlayer] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   function load(id?: string) {
     const url = id ? `/api/leaderboard?seasonId=${id}` : "/api/leaderboard";
     fetch(url).then((r) => r.json()).then((data) => {
+      setLoading(false);
       setPlayers(data.players ?? []);
       setTeams(data.teams ?? []);
       setSeasons(data.seasons ?? []);
       if (data.season) setSeasonId(data.season.id);
+    }).catch(() => {
+      // Network/parse error — stop the skeleton and fall through to the empty
+      // "No players yet" state rather than spinning forever.
+      setLoading(false);
     });
   }
 
@@ -90,7 +132,7 @@ export default function LeaderboardPage() {
         </div>
         {tab === "players" && (
           <button
-            onClick={() => setShowPicks((v) => !v)}
+            onClick={() => setShowPicks(!showPicks)}
             className={`text-xs px-3 py-1.5 rounded-lg border transition-all mb-1 ${
               showPicks
                 ? "border-blue-500 bg-blue-900/30 text-blue-300"
@@ -102,8 +144,10 @@ export default function LeaderboardPage() {
         )}
       </div>
 
+      {loading && <LeaderboardSkeleton />}
+
       {/* Players tab */}
-      {tab === "players" && (
+      {!loading && tab === "players" && (
         <div className="rounded-xl border border-white/10 overflow-hidden">
           <table className="w-full text-sm">
             <thead>
@@ -128,8 +172,10 @@ export default function LeaderboardPage() {
                   >
                     <td className="px-4 py-3 text-gray-600">{i + 1}</td>
                     <td className="px-4 py-3">
-                      <div className="font-medium">{player.displayName}</div>
-                      {player.teamName && <div className="text-xs text-gray-500">{player.teamName}</div>}
+                      <div className="font-medium">{player.realName ?? player.displayName}</div>
+                      <div className="text-xs text-gray-500">
+                        @{player.username}{player.teamName && ` · ${player.teamName}`}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-right text-green-400 hidden sm:table-cell">{player.wins}</td>
                     <td className="px-4 py-3 text-right text-red-400 hidden sm:table-cell">{player.losses}</td>
@@ -140,20 +186,31 @@ export default function LeaderboardPage() {
                   {(showPicks || expandedPlayer === player.id) && player.picks.length > 0 && (
                     <tr key={`${player.id}-picks`} className="bg-black/20">
                       <td colSpan={6} className="px-4 py-3">
-                        <div className="flex flex-wrap gap-1.5">
-                          {player.picks.sort((a, b) => a.week - b.week).map((pick) => (
-                            <span
-                              key={pick.week}
-                              className={`inline-flex items-center rounded-md px-2 py-1 text-xs border ${
-                                pick.result === "WIN" ? "bg-green-900/30 border-green-800 text-green-300" :
-                                pick.result === "LOSS" ? "bg-red-900/20 border-red-900 text-red-400" :
-                                "bg-white/5 border-white/10 text-gray-400"
-                              }`}
-                            >
-                              {pick.label}: {getTeamName(pick.team)}
-                              {pick.points > 0 && <span className="ml-1 text-gray-500">+{pick.points}</span>}
-                            </span>
-                          ))}
+                        <div className="overflow-x-auto">
+                          <table className="text-xs whitespace-nowrap">
+                            <thead>
+                              <tr>
+                                {player.picks.sort((a, b) => a.week - b.week).map((pick) => (
+                                  <th key={pick.week} className="text-left pr-5 pb-1.5 font-medium text-gray-500 uppercase tracking-wider">
+                                    {pick.label.replace(/^Week (\d+)$/, "Wk $1")}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr>
+                                {player.picks.sort((a, b) => a.week - b.week).map((pick) => (
+                                  <td key={pick.week} className={`pr-5 ${
+                                    pick.result === "WIN" ? "text-green-400" :
+                                    pick.result === "LOSS" ? "text-red-400" :
+                                    "text-gray-500"
+                                  }`}>
+                                    {pick.team} {pick.result === "WIN" ? "✓" : pick.result === "LOSS" ? "✗" : "–"}
+                                  </td>
+                                ))}
+                              </tr>
+                            </tbody>
+                          </table>
                         </div>
                       </td>
                     </tr>
@@ -166,7 +223,7 @@ export default function LeaderboardPage() {
       )}
 
       {/* Teams tab */}
-      {tab === "teams" && (
+      {!loading && tab === "teams" && (
         <div className="space-y-3">
           {teams.length === 0 && <p className="text-center py-10 text-gray-600 text-sm">No teams yet</p>}
           {teams.map((team, i) => (
@@ -194,6 +251,23 @@ export default function LeaderboardPage() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function LeaderboardSkeleton() {
+  return (
+    <div className="rounded-xl border border-white/10 overflow-hidden" aria-hidden="true">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="flex items-center gap-4 border-b border-white/5 px-4 py-3.5 last:border-b-0">
+          <div className="h-4 w-4 rounded bg-white/10 animate-pulse" />
+          <div className="flex-1 space-y-1.5">
+            <div className="h-4 w-32 rounded bg-white/10 animate-pulse" />
+            <div className="h-3 w-20 rounded bg-white/10 animate-pulse" />
+          </div>
+          <div className="h-4 w-8 rounded bg-white/10 animate-pulse" />
+        </div>
+      ))}
     </div>
   );
 }

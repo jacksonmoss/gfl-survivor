@@ -1,26 +1,54 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* The app is dark-theme only. The palette (gray-950 bg, white text) is declared
+   once on <body> in the root layout; keep it the single source of truth rather
+   than reintroducing a prefers-color-scheme-driven body background here, which
+   (being un-layered) would override the layout utilities and turn the theme
+   white in light-mode browsers. */
+body {
+  font-family: Arial, Helvetica, sans-serif;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* --- Motion system -------------------------------------------------------
+   Keyframes are transform/opacity-only so they stay on the GPU compositor
+   and never trigger layout/paint. Registered as Tailwind `animate-*`
+   utilities via @theme. Skeleton loaders reuse the built-in `animate-pulse`.
+   ------------------------------------------------------------------------- */
+@theme {
+  --animate-fade-in: fade-in 0.3s ease-out both;
+  --animate-fade-in-up: fade-in-up 0.35s ease-out both;
+  --animate-pop: pop 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes pop {
+  from { transform: scale(0.85); }
+  to { transform: scale(1); }
+}
+
+/* Respect users who ask for less motion (and cut animation cost on low-end
+   devices that set it). Keep everything functional, just near-instant. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

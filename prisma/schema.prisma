@@ -25,6 +25,12 @@ enum PickResult {
   PUSH
 }
 
+enum ReminderSlot {
+  THURSDAY
+  SUNDAY
+  PLAYOFF
+}
+
 
 model User {
   id             String               @id @default(cuid())
@@ -32,7 +38,9 @@ model User {
   email          String?              @unique
   passwordHash   String
   displayName    String
+  realName       String?
   role           Role                 @default(PLAYER)
+  emailReminders Boolean              @default(true)
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt
   picks          Pick[]
@@ -42,6 +50,7 @@ model User {
   teamId         String?
   team           Team?                @relation(fields: [teamId], references: [id])
   resetTokens    PasswordResetToken[]
+  reminderLogs   ReminderLog[]
 }
 
 model PasswordResetToken {
@@ -84,6 +93,7 @@ model Week {
   pickDeadline DateTime
   games        Game[]
   picks        Pick[]
+  reminderLogs ReminderLog[]
   createdAt    DateTime @default(now())
 
   @@unique([seasonId, weekNumber])
@@ -100,6 +110,9 @@ model Game {
   status     GameStatus @default(SCHEDULED)
   kickoff    DateTime
   externalId String?    @unique
+  // Cached Open-Meteo forecast for outdoor games; null for domes / not-yet-fetched.
+  // Shape: GameWeather in src/lib/weather.ts ({ temp_f, wind_mph, wind_dir, precip_chance, code, fetched_at }).
+  weatherJson Json?
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
 }
@@ -125,4 +138,19 @@ model Team {
   name      String   @unique
   members   User[]
   createdAt DateTime @default(now())
+}
+
+// One row per (user, week, reminder slot) — the idempotency ledger that keeps
+// re-running the send job from double-emailing. See src/lib/reminders.ts.
+model ReminderLog {
+  id     String       @id @default(cuid())
+  userId String
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weekId String
+  week   Week         @relation(fields: [weekId], references: [id], onDelete: Cascade)
+  slot   ReminderSlot
+  sentAt DateTime     @default(now())
+
+  @@unique([userId, weekId, slot])
+  @@index([weekId])
 }

@@ -10,9 +10,10 @@ export async function GET() {
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { displayName: true, username: true, email: true, teamId: true, team: { select: { name: true } } },
+    select: { displayName: true, realName: true, username: true, email: true, emailReminders: true },
   });
 
+  if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
   return NextResponse.json(user);
 }
 
@@ -20,19 +21,27 @@ export async function PATCH(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { displayName, email, currentPassword, newPassword } = await req.json();
+  const { displayName, realName, email, emailReminders, currentPassword, newPassword } = await req.json();
 
-  const updates: Record<string, string | null> = {};
+  const updates: Record<string, string | boolean | null> = {};
 
   if (displayName) {
     updates.displayName = displayName;
+  }
+
+  if (emailReminders !== undefined) {
+    updates.emailReminders = Boolean(emailReminders);
+  }
+
+  if (realName !== undefined) {
+    updates.realName = typeof realName === "string" && realName.trim() !== "" ? realName.trim() : null;
   }
 
   if (email !== undefined) {
     const trimmed = typeof email === "string" ? email.trim().toLowerCase() : "";
     if (trimmed === "") {
       updates.email = null;
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+    } else if (trimmed.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
       return NextResponse.json(
         { error: "Please enter a valid email address" },
         { status: 400 }
