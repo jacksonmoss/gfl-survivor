@@ -32,6 +32,7 @@ export default function AdminPage() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [loading, setLoading] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true);
 
   // Players tab
   const [resetUserId, setResetUserId] = useState("");
@@ -60,31 +61,37 @@ export default function AdminPage() {
   const [availableCodes, setAvailableCodes] = useState(0);
 
   const loadAll = useCallback(async () => {
-    const [usersRes, teamsRes, seasonsRes, invitesRes] = await Promise.all([
-      fetch("/api/admin/users"),
-      fetch("/api/teams"),
-      fetch("/api/admin/season"),
-      fetch("/api/admin/invites"),
-    ]);
+    try {
+      const [usersRes, teamsRes, seasonsRes, invitesRes] = await Promise.all([
+        fetch("/api/admin/users"),
+        fetch("/api/teams"),
+        fetch("/api/admin/season"),
+        fetch("/api/admin/invites"),
+      ]);
 
-    if (usersRes.ok) {
-      const data = await usersRes.json();
-      setUsers(data);
-      if (data.length > 0) setResetUserId(data[0].id);
-    }
-    if (teamsRes.ok) {
-      const data = await teamsRes.json();
-      setTeams(data.teams ?? []);
-    }
-    if (seasonsRes.ok) {
-      const data = await seasonsRes.json();
-      setSeasons(data);
-      if (data.length > 0) setImportSeasonId((prev) => prev || data[0].id);
-    }
-    if (invitesRes.ok) {
-      const data = await invitesRes.json();
-      const available = (data as { usedBy: unknown }[]).filter((c) => !c.usedBy).length;
-      setAvailableCodes(available);
+      if (usersRes.ok) {
+        const data = await usersRes.json();
+        setUsers(data);
+        if (data.length > 0) setResetUserId(data[0].id);
+      }
+      if (teamsRes.ok) {
+        const data = await teamsRes.json();
+        setTeams(data.teams ?? []);
+      }
+      if (seasonsRes.ok) {
+        const data = await seasonsRes.json();
+        setSeasons(data);
+        if (data.length > 0) setImportSeasonId((prev) => prev || data[0].id);
+      }
+      if (invitesRes.ok) {
+        const data = await invitesRes.json();
+        const available = (data as { usedBy: unknown }[]).filter((c) => !c.usedBy).length;
+        setAvailableCodes(available);
+      }
+    } finally {
+      // Clear the initial skeleton even if a fetch fails, so sections fall
+      // through to their empty states rather than spinning forever.
+      setInitialLoad(false);
     }
   }, []);
 
@@ -278,8 +285,10 @@ export default function AdminPage() {
         ))}
       </div>
 
+      {initialLoad && <AdminSkeleton />}
+
       {/* Players tab */}
-      {tab === "players" && (
+      {!initialLoad && tab === "players" && (
         <div className="space-y-6">
           <div className="rounded-xl border border-white/10 overflow-hidden">
             <table className="w-full text-sm">
@@ -345,7 +354,7 @@ export default function AdminPage() {
       )}
 
       {/* Teams tab */}
-      {tab === "teams" && (
+      {!initialLoad && tab === "teams" && (
         <div className="space-y-6">
           {/* Create team */}
           <div className="rounded-xl border border-white/10 bg-white/5 p-5 space-y-3">
@@ -467,7 +476,7 @@ export default function AdminPage() {
       )}
 
       {/* Season tab */}
-      {tab === "season" && (
+      {!initialLoad && tab === "season" && (
         <div className="space-y-6">
           <div className="rounded-xl border border-white/10 bg-white/5 p-5 space-y-3">
             <h3 className="text-sm font-medium text-gray-300">Create Season</h3>
@@ -508,7 +517,7 @@ export default function AdminPage() {
       )}
 
       {/* Import tab */}
-      {tab === "import" && (
+      {!initialLoad && tab === "import" && (
         <div className="space-y-6">
           <div className="rounded-xl border border-white/10 bg-white/5 p-5 space-y-4">
             <div>
@@ -563,7 +572,7 @@ export default function AdminPage() {
       )}
 
       {/* Invites tab */}
-      {tab === "invites" && (
+      {!initialLoad && tab === "invites" && (
         <div className="space-y-4">
           <div className="rounded-xl border border-white/10 bg-white/5 p-5 space-y-3">
             <div className="flex items-center justify-between">
@@ -584,6 +593,29 @@ export default function AdminPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function AdminSkeleton() {
+  return (
+    <div className="space-y-6" aria-hidden="true">
+      <div className="rounded-xl border border-white/10 overflow-hidden">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-4 border-b border-white/5 px-4 py-3.5 last:border-b-0">
+            <div className="flex-1 space-y-1.5">
+              <div className="h-4 w-32 rounded bg-white/10 animate-pulse" />
+              <div className="h-3 w-20 rounded bg-white/10 animate-pulse" />
+            </div>
+            <div className="h-4 w-24 rounded bg-white/10 animate-pulse hidden sm:block" />
+            <div className="h-5 w-14 rounded-full bg-white/10 animate-pulse" />
+          </div>
+        ))}
+      </div>
+      <div className="rounded-xl border border-white/10 bg-white/5 p-5 space-y-3">
+        <div className="h-4 w-40 rounded bg-white/10 animate-pulse" />
+        <div className="h-10 w-full rounded-lg bg-white/10 animate-pulse" />
+      </div>
     </div>
   );
 }
