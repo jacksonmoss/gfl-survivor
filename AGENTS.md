@@ -203,6 +203,7 @@ Team ── User[] (members, for team trophy standings)
 - [x] Settings page (display name, real name, email, reminders, password change; team management is admin-only)
 - [x] Admin panel (season creation, invite codes)
 - [x] Mobile-responsive UI across all pages
+- [x] Real-device mobile testing (#28) — `pnpm dev:lan` binds `0.0.0.0` so a phone on the same Wi-Fi can load the app; auth verified working over a LAN IP with the default `NEXTAUTH_URL`. See "Testing on a real mobile device" in Quick Start.
 - [x] Demo seed data (10 players, 3 teams, 3 completed weeks, 1 upcoming week)
 - [x] Week selector changed to dropdown (was horizontal scrollable pills)
 - [x] Pick visibility — other users' picks hidden until their game kicks off; admins see all
@@ -227,7 +228,6 @@ Team ── User[] (members, for team trophy standings)
 
 - [ ] **Tie handling** — score sync currently picks the home team as winner on ties. NFL regular season games can't tie (overtime rules), but worth verifying edge cases.
 - [ ] **CI security scanning** — #26: add dependency vulnerability scanning (osv-scanner/npm audit) and consider CodeQL/secret scanning to `.github/workflows/ci.yml`, alongside the existing lint/test/build job.
-- [ ] **Mobile testing support** — #28: make the dev server reachable from real devices on the LAN for manual testing (verify `NEXTAUTH_URL`/cookies work from a non-localhost origin). (E2E automation, #29, is done — see the Playwright suite in `e2e/`.)
 - [ ] **Weather follow-ups** (split from #16): #67 populate weather via cron (not just on picks-page load), #69 E2E coverage + seed fixture for the weather/dome strip.
 - [ ] **Betting-spread follow-ups** (split from #17): #72 E2E + seed coverage for the spread strip, #73 make the odds refresh gate multi-instance safe, #74 populate spreads via cron (coordinate with #67).
 
