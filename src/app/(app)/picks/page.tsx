@@ -6,6 +6,7 @@ import { getTeamName, getLogoUrl } from "@/lib/nfl-teams";
 import { isIndoorStadium } from "@/lib/stadiums";
 import { formatWeather, weatherIcon } from "@/lib/weather";
 import type { GameWeather } from "@/lib/weather";
+import { formatSpread } from "@/lib/odds";
 
 interface Game {
   id: string;
@@ -16,6 +17,7 @@ interface Game {
   status: string;
   kickoff: string;
   weatherJson: GameWeather | null;
+  spreadHome: number | null;
 }
 
 interface Week {
@@ -245,6 +247,8 @@ export default function PicksPage() {
                   // Hide the forecast once the game is final — the cached
                   // forecast is pre-game and would read as stale/current.
                   const weather = game.status === "FINAL" ? null : game.weatherJson;
+                  // Spread is pre-game context — hide it once the game is final.
+                  const spreadHome = game.status === "FINAL" ? null : game.spreadHome;
                   const awayPicked = currentPick?.team === game.awayTeam;
                   const homePicked = currentPick?.team === game.homeTeam;
                   const awayUsed = usedTeams.includes(game.awayTeam) && !awayPicked;
@@ -260,6 +264,7 @@ export default function PicksPage() {
                       <div className="flex divide-x divide-white/10">
                         <TeamSide
                           abbr={game.awayTeam}
+                          spread={spreadHome === null ? null : formatSpread(spreadHome, false)}
                           isPicked={awayPicked}
                           isUsed={awayUsed}
                           disabled={submitting || currentPickLocked || gameLocked || awayUsed}
@@ -267,6 +272,7 @@ export default function PicksPage() {
                         />
                         <TeamSide
                           abbr={game.homeTeam}
+                          spread={spreadHome === null ? null : formatSpread(spreadHome, true)}
                           isPicked={homePicked}
                           isUsed={homeUsed}
                           disabled={submitting || currentPickLocked || gameLocked || homeUsed}
@@ -387,9 +393,10 @@ function TeamLogo({ abbr, size = 40 }: { abbr: string; size?: number }) {
 }
 
 function TeamSide({
-  abbr, isPicked, isUsed, disabled, onPick,
+  abbr, spread, isPicked, isUsed, disabled, onPick,
 }: {
   abbr: string;
+  spread: string | null;
   isPicked: boolean;
   isUsed: boolean;
   disabled: boolean;
@@ -414,6 +421,9 @@ function TeamSide({
       <div className="text-xs mt-0.5 leading-snug">
         {getTeamName(abbr)}
       </div>
+      {spread !== null && (
+        <div className="mt-1 text-[11px] tabular-nums text-gray-500" title="Vegas spread">{spread}</div>
+      )}
       {isUsed && <div className="mt-1.5 text-xs text-gray-600">Used</div>}
       {isPicked && !isUsed && <div className="mt-1.5 text-xs text-blue-400">✓ Your pick</div>}
     </button>

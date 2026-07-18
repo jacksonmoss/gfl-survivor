@@ -77,11 +77,11 @@ src/
 │       ├── auth/reset-password/    # POST — consume token, set new password
 │       ├── picks/                  # GET season+picks, POST submit/change pick
 │       ├── leaderboard/            # GET player standings + team trophy (filters picks by visibility); ?seasonId= for history
-│       ├── scores/sync/            # POST — fetch live scores from ESPN, update games, auto-grade picks
+│       ├── scores/sync/            # POST — fetch live scores from ESPN, update games, auto-grade picks, refresh weather + betting spreads
 │       ├── settings/               # GET profile, PATCH update name/password
 │       ├── teams/                  # GET list, POST create/join/leave
 │       └── admin/
-│           ├── import-schedule/    # POST — import NFL schedule from ESPN for a season week (admin only)
+│           ├── import-schedule/    # POST — import NFL schedule from ESPN for a season week + prime betting spreads (admin only)
 │           ├── invites/            # GET/POST invite codes (admin only)
 │           ├── season/             # GET/POST seasons (admin only)
 │           ├── users/              # GET user list (admin only)
@@ -102,6 +102,8 @@ src/
     ├── espn.ts                     # ESPN API helpers: team abbr mapping, URL builder, response types
     ├── stadiums.ts                 # 32 NFL stadiums: lat/lon + indoor flag (dome/retractable) — for weather (tested)
     ├── weather.ts                  # pure Open-Meteo helpers: URL builder, forecast parse, cache staleness, display format (tested)
+    ├── odds.ts                     # pure The-Odds-API helpers: URL builder, spread parse/median, refresh gate, display format (tested)
+    ├── odds-sync.ts                # server-side bulk-odds fetch + persist to Game.spreadHome (imports prisma; wired into sync + import-schedule)
     ├── types.ts                    # NextAuth session/JWT type augmentation
     ├── prisma.ts                   # Singleton PrismaClient with PrismaPg adapter
     ├── teams.ts                    # pure team-name validation (trim/blank/collision/self-rename); route delegates to it (tested)
@@ -120,7 +122,7 @@ User ──┬── Pick (one per user per week, unique on userId+weekId)
        ├── email (optional, unique; used for password reset + reminders)
        └── emailReminders (bool, default true; opt-out toggle in Settings)
 
-Season ── Week[] ── Game[] (NFL games with scores/status + cached weatherJson)
+Season ── Week[] ── Game[] (NFL games with scores/status + cached weatherJson + spreadHome)
                  ├── Pick[] (all user picks for that week)
                  └── ReminderLog[] (reminders sent for that week)
 
@@ -157,6 +159,7 @@ Team ── User[] (members, for team trophy standings)
 - **Live score polling** — picks page auto-polls every 30s when games are live/started. Calls `/api/scores/sync` (rate-limited to 1 call per 30s globally) then re-fetches picks data. The sync endpoint is accessible to any authenticated user.
 - **Auto-grading** — when the score sync detects a game transition to FINAL, it determines the winner and sets all PENDING picks for that game to WIN/LOSS with points based on `week.pointValue`.
 - **Game-day weather** (#16) — outdoor matchup cards show a forecast (`☁ 41°F · Wind 22mph NW · 70% precip`); indoor stadiums show a `🏟️ Dome` symbol instead (never blank). Source is [Open-Meteo](https://open-meteo.com/) (free, no key). Stadium coords + indoor flag are a static table in `src/lib/stadiums.ts` — **retractable roofs (ARI, ATL, DAL, HOU, IND) and fixed roofs (SoFi = LAR/LAC, DET, LV, MIN, NO) count as indoor**; SEA (Lumen) and MetLife (NYG/NYJ) are **open-air** (the ticket's "SEA retractable" was wrong — Lumen only roofs the seats). Forecasts are fetched in the score-sync route for outdoor games within 72h of kickoff, cached in `Game.weatherJson` and refreshed at most every ~3h (`shouldFetchWeather`), so it's not re-fetched on every poll. Fetch failures are swallowed per-game (`Promise.allSettled`) so weather never breaks score sync or blanks a card. The picks page fires one sync on mount so weather populates before kickoff (ESPN stays rate-limited, weather stays cache-gated). Pure logic (URL build, forecast parse, staleness, compass/icon/format) lives in `src/lib/weather.ts` and is unit-tested; the dome indicator is derived client-side from the stadium table, so it needs no DB round-trip.
+- **Betting spread** (#17) — each matchup card shows the Vegas point spread under each team (favorite `-6.5`, underdog `+6.5`, `PK` for pick'em); absent (nothing shown) when odds aren't available or `ODDS_API_KEY` is unset, so the feature **degrades gracefully**. Source is [The Odds API](https://the-odds-api.com/) (free tier 500 req/month). Unlike weather (per-stadium), the NFL odds endpoint returns **every** upcoming game in one call, so we make a single **bulk** fetch and match each game by full team name (`getTeamName`), taking the **median** home spread across US bookmakers. Stored on `Game.spreadHome` (Float?, negative = home favored; the away spread is always the inverse) so the picks page never makes a live odds call. The fetch lives in `src/lib/odds-sync.ts` (`refreshOddsForGames`, imports Prisma) and is wired into **both** the score-sync route and admin import-schedule. It's gated by a **shared module-level `lastOddsFetch`** timestamp refreshing at most every ~6h (`ODDS_REFRESH_MS`) — same single-instance tradeoff as the score-sync cooldown — and only prices games within 7 days of kickoff and not yet started (`gameNeedsOdds`); this keeps well within the 500/month quota. Failures are swallowed (`Promise.allSettled` + try/catch) so odds never break score sync or schedule import. The spread is hidden client-side once a game is FINAL (it's pre-game context). Pure logic (URL build, spread parse/median, refresh gate, `formatSpread`) lives in `src/lib/odds.ts` and is unit-tested.
 - **Auth rate limiting** — `src/proxy.ts` rate-limits the sensitive auth endpoints by client IP: forgot-password (5/15min), reset-password (10/hour), login credentials callback (10/15min). Over-limit → `429` with `Retry-After`. In-memory fixed-window store in `src/lib/rate-limit.ts` (single-instance only; resets on restart, not shared across replicas). Note: **Next 16 renamed the `middleware` file convention to `proxy`** (`proxy.ts`, exports `proxy()` + `config.matcher`; defaults to the Node.js runtime) — `middleware.ts` is deprecated. Client IP comes from `X-Forwarded-For`/`X-Real-IP`, set by nginx (`deploy/nginx.conf`).
 - **Password reset** — email is optional, set on the Settings page. `/forgot-password` requests a link (always returns success to avoid account enumeration; only sends if the account has an email). Tokens are random 32-byte hex, stored only as a SHA-256 hash, single-use, 1h expiry. `/reset-password?token=` consumes it. Email is sent via `lib/mailer.ts` (SMTP from `SMTP_*` env; logs the link to the console when SMTP is unconfigured). Admins have a last-resort reset in the admin panel that generates a temp password (returned once, never stored) to relay out of band.
 - **Pick reminders** — email nudges to users who still have no pick, sent by an external scheduler (no in-app cron). `POST /api/admin/reminders/send` is authenticated by a `CRON_SECRET` bearer token (constant-time compared), *not* a session, so it can be called by system cron / a hosted scheduler. It resolves the current week (earliest week with a game still to kick off), computes which reminder *slots* are due, and emails opted-in users without a pick. Slot schedule (`src/lib/reminders.ts`, pure + tested): regular season = a **Thursday** slot (~3h before the Thursday-night game) and a **Sunday** slot (~3h before the earliest Sunday game), each skipped if that day has no game; playoffs = a single **morning-of** slot (9am ET on the first game's day, since playoff weekends can start Saturday). Weekday is computed in `America/New_York` — a Thursday-night kickoff is already Friday in UTC, so a naive UTC weekday would misclassify it. Idempotency: a `ReminderLog` row per (user, week, slot) is **claimed before sending** (unique-constraint conflict → skip), so re-running or overlapping cron runs never double-email. Lead time is tunable via `REMINDER_LEAD_HOURS`. Reuses `lib/mailer.ts` (console fallback when SMTP is unconfigured). See the "Pick reminders (cron)" section in `DEPLOYMENT.md`.
@@ -188,6 +191,7 @@ Team ── User[] (members, for team trophy standings)
 - [x] NFL schedule import — admin can import from ESPN by week or all at once
 - [x] Live score syncing — fetches from ESPN, updates game scores/status in real time
 - [x] Game-day weather (#16) — Open-Meteo forecast on outdoor matchup cards, `🏟️ Dome` for indoor; cached in `Game.weatherJson`, refreshed in the score-sync route (corrected SEA to open-air)
+- [x] Betting spread (#17) — The Odds API consensus (median) spread under each team on matchup cards; cached in `Game.spreadHome`, bulk-fetched + 6h-gated in `src/lib/odds-sync.ts` (wired into score-sync + import-schedule), degrades gracefully without `ODDS_API_KEY`
 - [x] Auto-grade picks — picks graded automatically when games go FINAL
 - [x] Client-side live polling — picks page polls every 30s during active game windows
 - [x] Vitest test suite — unit tests for pure logic extracted to `lib/` (NFL teams, ESPN, pick locking/visibility/grading, reset tokens, reminders, team-name validation)
@@ -207,6 +211,7 @@ Team ── User[] (members, for team trophy standings)
 - [ ] **CI security scanning** — #26: add dependency vulnerability scanning (osv-scanner/npm audit) and consider CodeQL/secret scanning to `.github/workflows/ci.yml`, alongside the existing lint/test/build job.
 - [ ] **Mobile testing support** — #28: make the dev server reachable from real devices on the LAN for manual testing (verify `NEXTAUTH_URL`/cookies work from a non-localhost origin). (E2E automation, #29, is done — see the Playwright suite in `e2e/`.)
 - [ ] **Weather follow-ups** (split from #16): #67 populate weather via cron (not just on picks-page load), #69 E2E coverage + seed fixture for the weather/dome strip.
+- [ ] **Betting-spread follow-ups** (split from #17): #72 E2E + seed coverage for the spread strip, #73 make the odds refresh gate multi-instance safe, #74 populate spreads via cron (coordinate with #67).
 - [ ] **Session behavior documentation** — #23: JWT sessions persist across app restarts by design (stateless, signed with `NEXTAUTH_SECRET` from `.env`); document this so it isn't mistaken for a bug, and decide whether to set an explicit `session.maxAge`.
 
 ## Testing
@@ -222,6 +227,7 @@ src/__tests__/
 ├── reminders.test.ts       # Reminder slots (Thu/Sun/playoff), timezone weekday, due window, recipient filter
 ├── stadiums.test.ts        # Stadium table integrity, exact indoor set (SEA outdoor regression) — src/lib/stadiums.ts
 ├── weather.test.ts         # Open-Meteo URL/parse, cache staleness, compass/icon/format — src/lib/weather.ts
+├── odds.test.ts            # Odds-API URL/parse, median spread, refresh gate, spread display format — src/lib/odds.ts
 └── teams.test.ts           # Team name validation (trim, blank, collision, self-rename) — src/lib/teams.ts
 ```
 

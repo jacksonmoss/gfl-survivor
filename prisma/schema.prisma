@@ -113,6 +113,10 @@ model Game {
   // Cached Open-Meteo forecast for outdoor games; null for domes / not-yet-fetched.
   // Shape: GameWeather in src/lib/weather.ts ({ temp_f, wind_mph, wind_dir, precip_chance, code, fetched_at }).
   weatherJson Json?
+  // Cached consensus point spread for the home team (negative = home favored,
+  // positive = home underdog); away spread is the inverse. Null when odds aren't
+  // available (preseason, international) or ODDS_API_KEY is unset. See src/lib/odds.ts.
+  spreadHome Float?
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
 }

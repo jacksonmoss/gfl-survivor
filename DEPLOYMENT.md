@@ -20,6 +20,10 @@ cp .env.prod.example .env.prod
 `NEXTAUTH_SECRET` is **required**. The app fails fast on startup
 (`src/instrumentation.ts`) with a clear error if it is missing in production.
 
+Optional: `ODDS_API_KEY` ([The Odds API](https://the-odds-api.com/), free tier
+500 req/month) enables the betting-spread strip on matchup cards. When unset,
+cards simply omit the spread — no error. See `.env.example`.
+
 ## Run
 
 ```bash

@@ -253,24 +253,26 @@ async function main() {
     console.log(`Added ${weekData.games.length} games for Week ${weekData.weekNumber}`);
   }
 
-  // Add games for week 4 (upcoming, no scores yet — future kickoffs)
+  // Add games for week 4 (upcoming, no scores yet — future kickoffs).
+  // `spread` is the demo home-team line (negative = home favored); one game is
+  // left without a spread to exercise the "gracefully absent" path.
   const week4Games = [
-    { away: "DAL", home: "NYG", day: "Thu", hour: 20 },
-    { away: "NO", home: "ATL", day: "Sun", hour: 13 },
-    { away: "CIN", home: "CAR", day: "Sun", hour: 13 },
-    { away: "JAX", home: "HOU", day: "Sun", hour: 13 },
-    { away: "DEN", home: "NYJ", day: "Sun", hour: 13 },
-    { away: "MIN", home: "GB", day: "Sun", hour: 13 },
-    { away: "PIT", home: "IND", day: "Sun", hour: 13 },
-    { away: "TB", home: "PHI", day: "Sun", hour: 13 },
-    { away: "WAS", home: "ARI", day: "Sun", hour: 16 },
-    { away: "NE", home: "SF", day: "Sun", hour: 16 },
-    { away: "CLE", home: "LV", day: "Sun", hour: 16 },
-    { away: "KC", home: "LAC", day: "Sun", hour: 16 },
-    { away: "BUF", home: "BAL", day: "Sun", hour: 20 },
-    { away: "TEN", home: "MIA", day: "Mon", hour: 20 },
-    { away: "SEA", home: "DET", day: "Mon", hour: 20 },
-    { away: "CHI", home: "LAR", day: "Mon", hour: 20 },
+    { away: "DAL", home: "NYG", day: "Thu", hour: 20, spread: 3.5 },
+    { away: "NO", home: "ATL", day: "Sun", hour: 13, spread: -6.5 },
+    { away: "CIN", home: "CAR", day: "Sun", hour: 13, spread: 4 },
+    { away: "JAX", home: "HOU", day: "Sun", hour: 13, spread: -2.5 },
+    { away: "DEN", home: "NYJ", day: "Sun", hour: 13, spread: 1.5 },
+    { away: "MIN", home: "GB", day: "Sun", hour: 13, spread: -3 },
+    { away: "PIT", home: "IND", day: "Sun", hour: 13, spread: 0 },
+    { away: "TB", home: "PHI", day: "Sun", hour: 13, spread: -5.5 },
+    { away: "WAS", home: "ARI", day: "Sun", hour: 16, spread: 2.5 },
+    { away: "NE", home: "SF", day: "Sun", hour: 16, spread: -7 },
+    { away: "CLE", home: "LV", day: "Sun", hour: 16, spread: -1.5 },
+    { away: "KC", home: "LAC", day: "Sun", hour: 16, spread: 2.5 },
+    { away: "BUF", home: "BAL", day: "Sun", hour: 20, spread: 1 },
+    { away: "TEN", home: "MIA", day: "Mon", hour: 20, spread: -3.5 },
+    { away: "SEA", home: "DET", day: "Mon", hour: 20, spread: -4.5 },
+    { away: "CHI", home: "LAR", day: "Mon", hour: 20 }, // no line — degrades gracefully
   ];
 
   const week4 = weeks[3];
@@ -289,6 +291,7 @@ async function main() {
         awayTeam: game.away,
         status: "SCHEDULED",
         kickoff,
+        spreadHome: game.spread ?? null,
       },
     });
   }
