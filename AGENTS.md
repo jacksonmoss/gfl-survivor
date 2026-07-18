@@ -23,6 +23,23 @@ Demo credentials:
 - Admin: `admin` / `admin123`
 - All players: `password` (usernames: jdog, mike_t, sara_k, bigben, chadwick, tommy_b, lucky13, ace_v, queenb, zeke99)
 
+### Testing on a real mobile device (same Wi-Fi)
+
+The UI is mobile-first; to test layouts on an actual phone rather than devtools emulation, run the dev server bound to all interfaces so it's reachable over the LAN:
+
+```bash
+pnpm dev:lan                  # next dev --turbopack -H 0.0.0.0
+```
+
+Then, from a phone on the **same Wi-Fi**, open `http://<your-LAN-IP>:3000`. Find the IP with:
+- Linux: `hostname -I` (first address) · macOS: `ipconfig getifaddr en0` · Windows: `ipconfig` → IPv4 Address
+
+Next's startup banner prints `Network: http://0.0.0.0:3000` (it doesn't resolve the actual IP for you), so use the address from the command above.
+
+**Auth works over the LAN IP with no env changes** — leave `NEXTAUTH_URL="http://localhost:3000"`. Verified empirically: login/logout use relative redirects and the session cookie is host-scoped and non-`Secure` over plain http, so signing in from `http://192.168.x.x:3000` sets the cookie correctly and `/api/auth/session` returns the user. `NEXTAUTH_URL` only affects **absolute** URLs, so the sole caveat is that password-reset and reminder **email links** would embed `localhost` — irrelevant to layout testing. If you specifically need to click those links from the phone, temporarily set `NEXTAUTH_URL` to the LAN IP.
+
+Gotchas: your OS/router firewall must allow inbound `:3000` on the LAN; some networks (guest Wi-Fi, "AP isolation") block device-to-device traffic. Docker/Postgres needs no change — the phone talks to Next.js, which talks to the DB on the host.
+
 ## Stack
 
 | Layer | Technology | Notes |
