@@ -34,7 +34,7 @@ pnpm dev:lan                  # next dev --turbopack -H 0.0.0.0
 Then, from a phone on the **same Wi-Fi**, open `http://<your-LAN-IP>:3000`. Find the IP with:
 - Linux: `hostname -I` (first address) · macOS: `ipconfig getifaddr en0` · Windows: `ipconfig` → IPv4 Address
 
-Next's startup banner prints `Network: http://0.0.0.0:3000` (it doesn't resolve the actual IP for you), so use the address from the command above.
+Next's startup banner prints `Network: http://0.0.0.0:3000` (it doesn't resolve the actual IP for you), so use the address from the command above. (#77 tracks printing the resolved LAN URL automatically.)
 
 **Auth works over the LAN IP with no env changes** — leave `NEXTAUTH_URL="http://localhost:3000"`. Verified empirically: login/logout use relative redirects and the session cookie is host-scoped and non-`Secure` over plain http, so signing in from `http://192.168.x.x:3000` sets the cookie correctly and `/api/auth/session` returns the user. `NEXTAUTH_URL` only affects **absolute** URLs, so the sole caveat is that password-reset and reminder **email links** would embed `localhost` — irrelevant to layout testing. If you specifically need to click those links from the phone, temporarily set `NEXTAUTH_URL` to the LAN IP.
 
