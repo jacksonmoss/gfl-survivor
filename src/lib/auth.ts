@@ -54,6 +54,12 @@ export const authOptions: AuthOptions = {
     signIn: "/login",
   },
   session: {
+    // Stateless JWT sessions: the session is a signed cookie (NEXTAUTH_SECRET),
+    // with no server-side store — so restarting the app does NOT log users out
+    // (see AGENTS.md "Session behavior"). maxAge is set explicitly to NextAuth's
+    // 30-day default: long enough that weekly mobile users stay signed in between
+    // picks, short enough that abandoned sessions expire. This is intentional.
     strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60, // 30 days
   },
 };
