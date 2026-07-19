@@ -55,6 +55,13 @@ services:
     restart: unless-stopped
     expose:
       - "3000"
+    # The runner image is Node-only (no curl), so probe with node's fetch.
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   nginx:
     image: nginx:1.27-alpine
@@ -73,7 +80,8 @@ services:
     # Reload every 6h so renewed certs are picked up without a restart.
     command: /bin/sh -c "while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g 'daemon off;'"
     depends_on:
-      - app
+      app:
+        condition: service_healthy
 
   # Renews Let's Encrypt certificates. Bootstrap the first cert with
   # deploy/init-letsencrypt.sh; thereafter this attempts renewal twice a day

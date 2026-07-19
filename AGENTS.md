@@ -91,6 +91,7 @@ src/
 │   │   ├── settings/page.tsx       # Profile (display/real name, email, reminders), password change
 │   │   └── admin/page.tsx          # Season creation, invite codes, schedule import, score sync (ADMIN only)
 │   └── api/
+│       ├── health/                 # GET — unauthenticated readiness probe (SELECT 1); Docker healthcheck gates nginx on it
 │       ├── auth/[...nextauth]/     # NextAuth handler
 │       ├── auth/register/          # POST — invite-gated registration
 │       ├── auth/forgot-password/   # POST — request a reset link (no enumeration; emails if account has email)

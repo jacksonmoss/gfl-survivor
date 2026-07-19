@@ -159,6 +159,18 @@ docker compose -p gfl-prod -f docker-compose.prod.yml --env-file .env.prod \
   exec db pg_dump -U gfl gfl > backup-$(date +%F).sql
 ```
 
+**Health / readiness** — the app exposes an unauthenticated `GET /api/health`
+that returns `200 {"ok":true}` when the server is up and the DB is reachable
+(`503` otherwise). The `app` service has a Docker `healthcheck` hitting it, and
+**nginx waits on `condition: service_healthy`** before starting — so a clean
+`up -d` / redeploy no longer serves 502s while Next.js is still booting. Check
+it directly with:
+
+```bash
+curl -fsS https://your-host/api/health   # {"ok":true}
+docker compose -p gfl-prod -f docker-compose.prod.yml ps   # app shows "healthy"
+```
+
 **Stop / tear down:**
 
 ```bash
@@ -195,9 +207,6 @@ Lead time is tunable with `REMINDER_LEAD_HOURS` (default 3).
 
 ### Known gaps (tracked separately)
 
-- **nginx starts before the app is ready** — `depends_on` waits for the app
-  container to start, not for it to accept requests; there is no app healthcheck
-  yet, so the first requests after a deploy can 502 briefly. (#41)
 - **The Dockerfile isn't built in CI**, so it can silently break between deploys. (#42)
 - **No automated DB backups** — the `pg_dump` above is manual. (#43)
 - **nginx reloads on a 6h timer, not on renewal** — a renewed cert can be up to
