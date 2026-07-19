@@ -200,3 +200,7 @@ Lead time is tunable with `REMINDER_LEAD_HOURS` (default 3).
   yet, so the first requests after a deploy can 502 briefly. (#41)
 - **The Dockerfile isn't built in CI**, so it can silently break between deploys. (#42)
 - **No automated DB backups** — the `pg_dump` above is manual. (#43)
+- **nginx reloads on a 6h timer, not on renewal** — a renewed cert can be up to
+  ~6h stale in nginx; switch to a certbot `--deploy-hook`. (#80)
+- **TLS cert covers only the single `DOMAIN`** — no apex+`www` SAN or canonical
+  redirect. (#81)
