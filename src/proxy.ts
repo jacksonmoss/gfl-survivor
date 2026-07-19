@@ -10,8 +10,10 @@ import {
 // Rate-limit the sensitive auth endpoints by client IP (issue #5). Proxy (the
 // Next 16 rename of middleware) defaults to the Node.js runtime, so the
 // in-memory store in lib/rate-limit persists across requests in a single
-// instance. This is the only place we can return a real 429 for the NextAuth
-// credentials callback, which is otherwise handled entirely inside NextAuth.
+// instance. Login is NOT limited here: the proxy runs in a separate module
+// context from the route handlers and can't see the auth result, so it can't
+// count failed logins only — that lives in the `authorize` callback in
+// src/lib/auth.ts instead (issue #46).
 const RULES: { path: string; prefix: string; config: RateLimitConfig }[] = [
   {
     path: "/api/auth/forgot-password",
@@ -22,12 +24,6 @@ const RULES: { path: string; prefix: string; config: RateLimitConfig }[] = [
     path: "/api/auth/reset-password",
     prefix: "reset-password",
     config: AUTH_RATE_LIMITS.resetPassword,
-  },
-  {
-    // NextAuth posts credentials sign-ins here.
-    path: "/api/auth/callback/credentials",
-    prefix: "login",
-    config: AUTH_RATE_LIMITS.login,
   },
 ];
 
@@ -59,9 +55,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    "/api/auth/forgot-password",
-    "/api/auth/reset-password",
-    "/api/auth/callback/credentials",
-  ],
+  matcher: ["/api/auth/forgot-password", "/api/auth/reset-password"],
 };

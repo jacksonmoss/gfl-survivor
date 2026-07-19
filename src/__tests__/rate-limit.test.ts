@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   rateLimit,
+  peekRateLimit,
+  resetRateLimit,
   getClientIp,
   __resetRateLimiter,
   AUTH_RATE_LIMITS,
@@ -73,6 +75,56 @@ describe("rateLimit", () => {
       windowMs: 60 * 60_000,
     });
     expect(AUTH_RATE_LIMITS.login).toEqual({ max: 10, windowMs: 15 * 60_000 });
+  });
+});
+
+describe("peekRateLimit", () => {
+  it("does not consume budget — repeated peeks never trip the limit", () => {
+    const t = 1_000;
+    for (let i = 0; i < 100; i++) {
+      expect(peekRateLimit("ip", config, t).limited).toBe(false);
+    }
+    // A fresh consume still sees the full budget.
+    expect(rateLimit("ip", config, t).remaining).toBe(config.max - 1);
+  });
+
+  it("reports remaining without decrementing it", () => {
+    const t = 1_000;
+    rateLimit("ip", config, t); // consume 1 of 3
+    expect(peekRateLimit("ip", config, t).remaining).toBe(2);
+    expect(peekRateLimit("ip", config, t).remaining).toBe(2);
+  });
+
+  it("reports limited (with retry-after) once the count hits max", () => {
+    const t = 1_000;
+    for (let i = 0; i < config.max; i++) rateLimit("ip", config, t);
+    const result = peekRateLimit("ip", config, t + 4_000);
+    expect(result.limited).toBe(true);
+    expect(result.retryAfterSeconds).toBe(6);
+  });
+
+  it("reports not-limited for an unknown key or an elapsed window", () => {
+    const t = 1_000;
+    expect(peekRateLimit("never-seen", config, t).limited).toBe(false);
+    for (let i = 0; i < config.max; i++) rateLimit("ip", config, t);
+    expect(peekRateLimit("ip", config, t + config.windowMs).limited).toBe(false);
+  });
+});
+
+describe("resetRateLimit", () => {
+  it("clears an existing window so budget is restored", () => {
+    const t = 1_000;
+    for (let i = 0; i < config.max; i++) rateLimit("ip", config, t);
+    expect(peekRateLimit("ip", config, t).limited).toBe(true);
+
+    resetRateLimit("ip");
+
+    expect(peekRateLimit("ip", config, t).limited).toBe(false);
+    expect(rateLimit("ip", config, t).remaining).toBe(config.max - 1);
+  });
+
+  it("is a no-op for an unknown key", () => {
+    expect(() => resetRateLimit("never-seen")).not.toThrow();
   });
 });
 
