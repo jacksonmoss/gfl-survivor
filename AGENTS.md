@@ -23,6 +23,25 @@ Demo credentials:
 - Admin: `admin` / `admin123`
 - All players: `password` (usernames: jdog, mike_t, sara_k, bigben, chadwick, tommy_b, lucky13, ace_v, queenb, zeke99)
 
+### Testing on a real mobile device (same Wi-Fi)
+
+The UI is mobile-first; to test layouts on an actual phone rather than devtools emulation, run the dev server bound to all interfaces so it's reachable over the LAN:
+
+```bash
+pnpm dev:lan                  # next dev --turbopack -H 0.0.0.0
+```
+
+Then, from a phone on the **same Wi-Fi**, open `http://<your-LAN-IP>:3000`. Find the IP with:
+- Linux: `hostname -I` (first address) · macOS: `ipconfig getifaddr en0` · Windows: `ipconfig` → IPv4 Address
+
+Next's startup banner prints `Network: http://0.0.0.0:3000` (it doesn't resolve the actual IP for you), so use the address from the command above. (#77 tracks printing the resolved LAN URL automatically.)
+
+**Cross-origin dev assets** — Next 16 blocks its dev-only assets (HMR, client JS chunks) from any origin other than `localhost` by default. Loaded from a LAN IP without allowlisting it, **the page HTML renders but the client never hydrates** — and the login form then silently falls back to a native `GET /login?username=…&password=…` (the `onSubmit`/`signIn()` handler never runs), so sign-in appears to "do nothing." `next.config.ts` allowlists the common private ranges via `allowedDevOrigins: ["192.168.*.*", "10.*.*.*"]` (dev-only; no effect on production builds), so `pnpm dev:lan` works out of the box on a typical home network. If your Wi-Fi hands out a different range (e.g. `172.x`), add it there. Next's matcher is per-segment, so `*` matches exactly one segment.
+
+**Login works over the LAN IP with no env changes** — leave `NEXTAUTH_URL="http://localhost:3000"`. Verified empirically: sign-in uses `signIn(..., redirect: false)` + a client-side `router.push`, and the session cookie is host-scoped and non-`Secure` over plain http, so signing in from `http://192.168.x.x:3000` sets the cookie correctly and `/api/auth/session` returns the user. `NEXTAUTH_URL` only affects **absolute** URLs. Known caveats that resolve against it (and so point at `localhost`): password-reset and reminder **email links**, and — currently a bug — **logout** (`signOut({ callbackUrl })` returns an absolute URL, so it redirects to `localhost/login`; tracked in #78). For layout testing this is harmless; to exercise those from the phone, temporarily set `NEXTAUTH_URL` to the LAN IP.
+
+Gotchas: your OS/router firewall must allow inbound `:3000` on the LAN; some networks (guest Wi-Fi, "AP isolation") block device-to-device traffic. Docker/Postgres needs no change — the phone talks to Next.js, which talks to the DB on the host.
+
 ## Stack
 
 | Layer | Technology | Notes |
@@ -186,6 +205,7 @@ Team ── User[] (members, for team trophy standings)
 - [x] Settings page (display name, real name, email, reminders, password change; team management is admin-only)
 - [x] Admin panel (season creation, invite codes)
 - [x] Mobile-responsive UI across all pages
+- [x] Real-device mobile testing (#28) — `pnpm dev:lan` binds `0.0.0.0` so a phone on the same Wi-Fi can load the app; auth verified working over a LAN IP with the default `NEXTAUTH_URL`. See "Testing on a real mobile device" in Quick Start.
 - [x] Demo seed data (10 players, 3 teams, 3 completed weeks, 1 upcoming week)
 - [x] Week selector changed to dropdown (was horizontal scrollable pills)
 - [x] Pick visibility — other users' picks hidden until their game kicks off; admins see all
@@ -210,7 +230,6 @@ Team ── User[] (members, for team trophy standings)
 
 - [ ] **Tie handling** — score sync currently picks the home team as winner on ties. NFL regular season games can't tie (overtime rules), but worth verifying edge cases.
 - [ ] **CI security scanning** — #26: add dependency vulnerability scanning (osv-scanner/npm audit) and consider CodeQL/secret scanning to `.github/workflows/ci.yml`, alongside the existing lint/test/build job.
-- [ ] **Mobile testing support** — #28: make the dev server reachable from real devices on the LAN for manual testing (verify `NEXTAUTH_URL`/cookies work from a non-localhost origin). (E2E automation, #29, is done — see the Playwright suite in `e2e/`.)
 - [ ] **Weather follow-ups** (split from #16): #67 populate weather via cron (not just on picks-page load), #69 E2E coverage + seed fixture for the weather/dome strip.
 - [ ] **Betting-spread follow-ups** (split from #17): #72 E2E + seed coverage for the spread strip, #73 make the odds refresh gate multi-instance safe, #74 populate spreads via cron (coordinate with #67).
 
