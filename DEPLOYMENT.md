@@ -7,14 +7,15 @@ migrations are applied by a one-shot `migrate` service before the app starts.
 ## Prerequisites
 
 - Docker Engine with the Compose plugin (`docker compose`)
-- A host reachable on port 80 (add TLS in front — see below)
+- A public domain pointed at this host (DNS `A`/`AAAA` record) with ports 80 and
+  443 reachable from the internet — nginx terminates HTTPS (see [TLS](#tls))
 
 ## Configure
 
 ```bash
 cp .env.prod.example .env.prod
-# edit .env.prod: set POSTGRES_PASSWORD, DATABASE_URL, NEXTAUTH_URL,
-# and NEXTAUTH_SECRET (openssl rand -base64 32)
+# edit .env.prod: set POSTGRES_PASSWORD, DATABASE_URL, DOMAIN, CERTBOT_EMAIL,
+# NEXTAUTH_URL (the https:// DOMAIN), and NEXTAUTH_SECRET (openssl rand -base64 32)
 ```
 
 `NEXTAUTH_SECRET` is **required**. The app fails fast on startup
@@ -25,6 +26,15 @@ Optional: `ODDS_API_KEY` ([The Odds API](https://the-odds-api.com/), free tier
 cards simply omit the spread — no error. See `.env.example`.
 
 ## Run
+
+**First time only — bootstrap the TLS certificate** (see [TLS](#tls) for how it
+works). With DNS already pointing at this host:
+
+```bash
+./deploy/init-letsencrypt.sh
+```
+
+Then bring the full stack up:
 
 ```bash
 docker compose -p gfl-prod -f docker-compose.prod.yml --env-file .env.prod up -d --build
@@ -45,7 +55,8 @@ Startup order is enforced by Compose:
 1. `db` becomes healthy (`pg_isready`).
 2. `migrate` runs `prisma migrate deploy` and exits successfully.
 3. `app` starts only after the migrator completed (`service_completed_successfully`).
-4. `nginx` proxies port 80 → `app:3000`.
+4. `nginx` terminates HTTPS on 443 → `app:3000` and redirects port 80 → HTTPS.
+5. `certbot` renews the certificate in the background.
 
 Seed an initial admin + invite codes once the stack is up:
 
@@ -75,15 +86,45 @@ Notes:
 
 ## TLS
 
-`deploy/nginx.conf` terminates plain HTTP on port 80. For production, terminate
-HTTPS in front of the app and set `NEXTAUTH_URL` to the `https://` origin. Options:
+nginx terminates HTTPS on port 443 with a Let's Encrypt certificate, and
+redirects all plain HTTP (`:80`) to HTTPS. Certificates are obtained and renewed
+by a `certbot` companion container using the ACME **webroot** challenge — no
+manual annual step.
 
-- Add a `443` server block with certificates (e.g. Let's Encrypt via certbot) to
-  `deploy/nginx.conf` and publish port 443.
-- Or front the stack with a managed load balancer / Cloudflare and keep nginx on 80.
+**How it fits together:**
 
-nginx already forwards `X-Forwarded-Proto` / `X-Forwarded-Host` so NextAuth builds
-correct absolute callback URLs behind the proxy.
+- `deploy/nginx.conf.template` has two server blocks: `:80` serves
+  `/.well-known/acme-challenge/` (from the shared `certbot_www` volume) and 301s
+  everything else to HTTPS; `:443` terminates TLS (TLS 1.2/1.3, ECDHE ciphers),
+  sends `Strict-Transport-Security`, and proxies to `app:3000`. It's an nginx
+  *template* — the image runs `envsubst` at startup to fill in `${DOMAIN}`
+  (`NGINX_ENVSUBST_FILTER=DOMAIN` keeps nginx's own `$host`/`$scheme` vars intact).
+- The `certbot` service runs `certbot renew` every 12h; certbot only acts when
+  the cert is within 30 days of expiry. nginx reloads every 6h to pick up a
+  renewed cert. Certs live in the `certbot_certs` volume, shared read-only with
+  nginx.
+
+**First-time bootstrap** (`deploy/init-letsencrypt.sh`): nginx can't start
+without a cert, but the webroot challenge needs nginx running — so the script
+drops in a throwaway self-signed cert, starts nginx, then swaps in the real
+Let's Encrypt cert and reloads. Run it once per host/domain:
+
+```bash
+# set DOMAIN + CERTBOT_EMAIL in .env.prod first, and point DNS at this host
+./deploy/init-letsencrypt.sh
+# test against Let's Encrypt staging (untrusted cert, no rate limits):
+STAGING=1 ./deploy/init-letsencrypt.sh
+```
+
+Set `NEXTAUTH_URL=https://your-domain.com` — the `https://` origin makes NextAuth
+issue **Secure** cookies. nginx forwards `X-Forwarded-Proto` / `X-Forwarded-Host`
+so NextAuth builds correct absolute callback URLs behind the proxy.
+
+**Alternative — front with a managed LB / Cloudflare:** point it at this host and
+let it terminate TLS. Cloudflare "Full (strict)" works as-is against the real
+origin cert this stack already provisions. If your fronting layer terminates TLS
+itself and talks HTTP to the origin, ensure it forwards `X-Forwarded-Proto=https`
+and still set `NEXTAUTH_URL` to the `https://` origin.
 
 ## Managed platforms (Railway / Render)
 
@@ -154,9 +195,12 @@ Lead time is tunable with `REMINDER_LEAD_HOURS` (default 3).
 
 ### Known gaps (tracked separately)
 
-- **No TLS yet** — nginx serves plain HTTP on port 80 (see [TLS](#tls)). (#40)
 - **nginx starts before the app is ready** — `depends_on` waits for the app
   container to start, not for it to accept requests; there is no app healthcheck
   yet, so the first requests after a deploy can 502 briefly. (#41)
 - **The Dockerfile isn't built in CI**, so it can silently break between deploys. (#42)
 - **No automated DB backups** — the `pg_dump` above is manual. (#43)
+- **nginx reloads on a 6h timer, not on renewal** — a renewed cert can be up to
+  ~6h stale in nginx; switch to a certbot `--deploy-hook`. (#80)
+- **TLS cert covers only the single `DOMAIN`** — no apex+`www` SAN or canonical
+  redirect. (#81)

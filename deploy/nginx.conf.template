@@ -1,0 +1,73 @@
+# Reverse proxy for the GFL app container, with TLS termination.
+#
+# This is an nginx *template*: the official nginx image runs `envsubst` over
+# files in /etc/nginx/templates at startup. Only ${DOMAIN} is substituted
+# (NGINX_ENVSUBST_FILTER=DOMAIN in docker-compose.prod.yml) so nginx's own
+# runtime variables ($host, $scheme, …) are left untouched.
+#
+# Certificates come from the `certbot` companion container (Let's Encrypt,
+# webroot challenge). Bootstrap them once with deploy/init-letsencrypt.sh; the
+# `certbot` service then renews them automatically.
+
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+# HTTP :80 — serve ACME challenges, redirect everything else to HTTPS.
+server {
+    listen 80;
+    server_name ${DOMAIN};
+
+    # Let's Encrypt webroot challenge (also used for renewals).
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# HTTPS :443 — terminate TLS and proxy to the app.
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${DOMAIN};
+
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+
+    # Modern TLS (Mozilla "intermediate"-style): TLS 1.2/1.3, ECDHE only, so no
+    # custom dhparam file is needed (DHE ciphers are excluded).
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_tickets off;
+
+    # HSTS: force HTTPS for 2 years. Sent only over HTTPS. Deliberately without
+    # `includeSubDomains`/`preload` — this cert covers one host; opt into those
+    # only if every subdomain is HTTPS-only.
+    add_header Strict-Transport-Security "max-age=63072000" always;
+
+    # Live score polling is short-lived; a generous timeout is still helpful.
+    proxy_read_timeout 60s;
+
+    location / {
+        proxy_pass http://app:3000;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        # NextAuth trusts these to build absolute callback URLs behind a proxy.
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+
+        # Allow WebSocket/upgrade requests to pass through.
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+    }
+}
