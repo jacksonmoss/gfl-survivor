@@ -38,6 +38,9 @@ yarn-error.log*
 !.env.example
 !.env.prod.example
 
+# database backups (deploy/backup.sh writes here)
+/backups/
+
 # vercel
 .vercel
 
