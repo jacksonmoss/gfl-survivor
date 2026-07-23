@@ -37,6 +37,8 @@ services:
       context: .
       dockerfile: Dockerfile
       target: runner
+    # Tagged so the `reminders` sidecar can reuse the exact same image.
+    image: gfl-survivor-app:latest
     environment:
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
       NEXTAUTH_URL: ${NEXTAUTH_URL:?set NEXTAUTH_URL}
@@ -47,6 +49,10 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-}
+      # Shared secret the reminders sidecar authenticates with. Without it the
+      # reminders endpoint returns 503 and no reminders are sent.
+      CRON_SECRET: ${CRON_SECRET:-}
+      REMINDER_LEAD_HOURS: ${REMINDER_LEAD_HOURS:-}
     depends_on:
       db:
         condition: service_healthy
@@ -102,6 +108,31 @@ services:
     entrypoint: ["/bin/sh", "/usr/local/bin/backup.sh"]
     depends_on:
       db:
+        condition: service_healthy
+
+  # Polls the pick-reminders endpoint on a schedule (default every 15 min).
+  # Reuses the app image (no new dependency) and calls the app over the internal
+  # network with the CRON_SECRET, so the secret never leaves the compose network.
+  # The endpoint is idempotent and self-gates to slot windows, so frequent polls
+  # are safe — it only emails when a reminder slot is actually due. No-ops
+  # (returns 503) unless CRON_SECRET is set; needs SMTP configured to actually
+  # email rather than log to the console. See deploy/reminders.sh.
+  reminders:
+    # Reuses the app image built above (no separate build) — the runner image is
+    # Node-only, and the sidecar POSTs with node's global fetch (no curl needed).
+    image: gfl-survivor-app:latest
+    environment:
+      APP_URL: http://app:3000
+      # Optional: when unset the sidecar idles (logs a notice) instead of polling,
+      # so the stack still comes up without reminders configured.
+      CRON_SECRET: ${CRON_SECRET:-}
+      REMINDER_INTERVAL: ${REMINDER_INTERVAL:-900}
+    entrypoint: ["/bin/sh", "/usr/local/bin/reminders.sh"]
+    volumes:
+      - ./deploy/reminders.sh:/usr/local/bin/reminders.sh:ro
+    restart: unless-stopped
+    depends_on:
+      app:
         condition: service_healthy
 
   # Renews Let's Encrypt certificates. Bootstrap the first cert with
