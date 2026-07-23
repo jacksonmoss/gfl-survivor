@@ -151,12 +151,33 @@ docker compose -p gfl-prod -f docker-compose.prod.yml ps
 docker compose -p gfl-prod -f docker-compose.prod.yml logs -f app
 ```
 
-**Back up / restore the database** — state lives in the `gfl-prod_pgdata`
-volume; back it up on a schedule (nothing does this automatically yet):
+**Back up / restore the database** — the `backup` service runs `pg_dump`
+automatically. It reuses the `postgres:16-alpine` image (no extra dependency),
+writes a compressed, date-stamped custom-format dump (`gfl-YYYYmmdd-HHMMSS.dump`)
+into the `./backups` host directory on a schedule, and prunes to the newest
+`BACKUP_KEEP` dumps. `./backups` is a bind mount outside the `pgdata` volume, so
+dumps survive loss of that volume. Interval and retention are tunable in
+`.env.prod` (`BACKUP_INTERVAL`, default daily; `BACKUP_KEEP`, default 7); see
+`deploy/backup.sh`.
+
+For off-host durability (surviving loss of the whole host), sync `./backups` to
+object storage — e.g. a cron'd `rclone/aws s3 sync ./backups <remote>`.
+
+Check the latest dump and trigger one on demand:
 
 ```bash
+ls -lt backups/                                                   # newest first
+docker compose -p gfl-prod -f docker-compose.prod.yml restart backup   # run now
+```
+
+**Restore** from a dump with `pg_restore` (`--clean --if-exists` drops existing
+objects first, so it works into the live DB; restore into a scratch DB first if
+you want to verify without touching production):
+
+```bash
+# into the live database (app should be stopped: `... stop app`)
 docker compose -p gfl-prod -f docker-compose.prod.yml --env-file .env.prod \
-  exec db pg_dump -U gfl gfl > backup-$(date +%F).sql
+  exec -T db pg_restore -U gfl -d gfl --clean --if-exists < backups/gfl-YYYYmmdd-HHMMSS.dump
 ```
 
 **Health / readiness** — the app exposes an unauthenticated `GET /api/health`
@@ -207,7 +228,6 @@ Lead time is tunable with `REMINDER_LEAD_HOURS` (default 3).
 
 ### Known gaps (tracked separately)
 
-- **No automated DB backups** — the `pg_dump` above is manual. (#43)
 - **nginx reloads on a 6h timer, not on renewal** — a renewed cert can be up to
   ~6h stale in nginx; switch to a certbot `--deploy-hook`. (#80)
 - **TLS cert covers only the single `DOMAIN`** — no apex+`www` SAN or canonical
