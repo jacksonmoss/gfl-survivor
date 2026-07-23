@@ -7,6 +7,8 @@ import {
   needsReminder,
   buildReminderEmail,
   DEFAULT_REMINDER_CONFIG,
+  HANDLED_REMINDER_STATUSES,
+  isReminderRetryable,
 } from "@/lib/reminders";
 
 const TZ = DEFAULT_REMINDER_CONFIG.timeZone; // America/New_York
@@ -131,6 +133,19 @@ describe("needsReminder", () => {
 
   it("skips users with no email", () => {
     expect(needsReminder({ email: null, emailReminders: true, hasPick: false })).toBe(false);
+  });
+});
+
+describe("reminder send-status policy", () => {
+  it("treats a FAILED send as retryable", () => {
+    expect(isReminderRetryable("FAILED")).toBe(true);
+    expect(HANDLED_REMINDER_STATUSES).not.toContain("FAILED");
+  });
+
+  it("does not retry a delivered or in-flight reminder", () => {
+    expect(isReminderRetryable("SENT")).toBe(false);
+    expect(isReminderRetryable("PENDING")).toBe(false);
+    expect(HANDLED_REMINDER_STATUSES).toEqual(["PENDING", "SENT"]);
   });
 });
 

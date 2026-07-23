@@ -31,6 +31,12 @@ enum ReminderSlot {
   PLAYOFF
 }
 
+enum ReminderStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
 
 model User {
   id             String               @id @default(cuid())
@@ -147,13 +153,14 @@ model Team {
 // One row per (user, week, reminder slot) — the idempotency ledger that keeps
 // re-running the send job from double-emailing. See src/lib/reminders.ts.
 model ReminderLog {
-  id     String       @id @default(cuid())
+  id     String         @id @default(cuid())
   userId String
-  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   weekId String
-  week   Week         @relation(fields: [weekId], references: [id], onDelete: Cascade)
+  week   Week           @relation(fields: [weekId], references: [id], onDelete: Cascade)
   slot   ReminderSlot
-  sentAt DateTime     @default(now())
+  status ReminderStatus @default(PENDING)
+  sentAt DateTime       @default(now())
 
   @@unique([userId, weekId, slot])
   @@index([weekId])
