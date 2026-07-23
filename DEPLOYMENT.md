@@ -201,30 +201,46 @@ docker compose -p gfl-prod -f docker-compose.prod.yml down -v       # also delet
 
 ## Pick reminders (cron)
 
-Pick-deadline reminders are sent by an external scheduler hitting an
-authenticated endpoint — there is no in-app scheduler. Set `CRON_SECRET` in
-`.env.prod` (`openssl rand -hex 32`) and configure SMTP (see [Configure](#configure));
-without SMTP the reminders are logged to the app console instead of emailed.
+Pick-deadline reminders are sent by a scheduler hitting an authenticated
+endpoint — there is no in-app scheduler. The Compose stack ships a **`reminders`
+sidecar** (`deploy/reminders.sh`) that does this for you: it POSTs to the app's
+reminders endpoint every `REMINDER_INTERVAL` seconds (default 900 = 15 min).
 
-The endpoint is idempotent per (user, week, reminder slot), so it's safe to call
-often — poll it every ~15 minutes and it emails only when a slot's window is open
-(regular season: ~3h before Thursday night and the first Sunday game; playoffs:
-the morning of the week's first game) and only users who still haven't picked and
-haven't opted out:
+To enable it:
+
+1. Set `CRON_SECRET` in `.env.prod` (`openssl rand -hex 32`). The app and the
+   sidecar both read it; the sidecar sends it as `Authorization: Bearer`. Leave
+   it unset and the sidecar idles (logs a notice) and the endpoint returns 503 —
+   no reminders are sent, but the stack still comes up.
+2. Configure SMTP (see [Configure](#configure)). Without SMTP the reminders are
+   logged to the app console instead of emailed.
+
+That's it — `docker compose … up -d` starts the sidecar alongside the app. The
+call goes over the internal Compose network (`http://app:3000`), not through
+nginx/HTTPS, so `CRON_SECRET` never leaves the private network.
+
+The endpoint is idempotent per (user, week, reminder slot), so frequent polling
+is safe — it emails only when a slot's window is open (regular season: ~3h before
+Thursday night and the first Sunday game; playoffs: the morning of the week's
+first game) and only users who still haven't picked and haven't opted out. Lead
+time is tunable with `REMINDER_LEAD_HOURS` (default 3).
+
+**Watching it:** each poll logs to the sidecar's container log — the endpoint's
+JSON response on success, or `[reminders] send failed …` on a non-2xx/network
+error:
 
 ```bash
-curl -fsS -X POST https://your-host/api/admin/reminders/send \
-  -H "Authorization: Bearer $CRON_SECRET"
+docker compose -p gfl-prod -f docker-compose.prod.yml logs -f reminders
 ```
 
-Wire it to whatever scheduler the host provides — a crontab line, a Railway/Render
-cron job, or a GitHub Actions scheduled workflow. Example crontab (every 15 min):
+**Using a different scheduler instead** (host crontab, Railway/Render cron, a
+GitHub Actions `schedule:` workflow): drop the sidecar and POST the public
+endpoint yourself — the secret lives in that scheduler's secret store. Example
+crontab (every 15 min):
 
 ```cron
 */15 * * * * curl -fsS -X POST https://your-host/api/admin/reminders/send -H "Authorization: Bearer $CRON_SECRET" >/dev/null
 ```
-
-Lead time is tunable with `REMINDER_LEAD_HOURS` (default 3).
 
 A transient SMTP failure is not lost: the send is recorded per (user, week, slot)
 and a failed one is retried on the next poll (so a flaky mail server self-heals on
