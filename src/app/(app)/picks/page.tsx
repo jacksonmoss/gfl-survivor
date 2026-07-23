@@ -7,6 +7,7 @@ import { isIndoorStadium } from "@/lib/stadiums";
 import { formatWeather, weatherIcon } from "@/lib/weather";
 import type { GameWeather } from "@/lib/weather";
 import { formatSpread } from "@/lib/odds";
+import { useToast } from "@/components/toast";
 
 interface Game {
   id: string;
@@ -61,10 +62,10 @@ export default function PicksPage() {
   const [usedTeams, setUsedTeams] = useState<string[]>([]);
   const [selectedWeek, setSelectedWeek] = useState<Week | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [notice, setNotice] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [loading, setLoading] = useState(true);
   const weekRef = useRef<string | null>(null);
+  const toast = useToast();
 
   const load = useCallback(async (keepWeek = false) => {
     let data;
@@ -124,7 +125,6 @@ export default function PicksPage() {
     if (!selectedWeek) return;
     const week = selectedWeek;
     setSubmitting(true);
-    setNotice(null);
 
     // Optimistic update — reflect the pick instantly, then reconcile with the
     // server (or roll back on error). The current-pick card keys off the team,
@@ -149,13 +149,13 @@ export default function PicksPage() {
     });
     const data = await res.json();
     if (res.ok) {
-      setNotice({ type: "ok", text: `Picked ${getTeamName(team)}` });
+      toast.success(`Picked ${getTeamName(team)}`);
       load(true);
     } else {
       // Roll back the optimistic update.
       setPicks(prevPicks);
       setUsedTeams(prevUsed);
-      setNotice({ type: "err", text: data.error });
+      toast.error(data.error);
     }
     setSubmitting(false);
   }
@@ -191,7 +191,7 @@ export default function PicksPage() {
         value={selectedWeek?.id ?? ""}
         onChange={(e) => {
           const w = season.weeks.find((w) => w.id === e.target.value);
-          if (w) { setSelectedWeek(w); weekRef.current = w.id; setNotice(null); }
+          if (w) { setSelectedWeek(w); weekRef.current = w.id; }
         }}
         className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
       >
@@ -226,12 +226,6 @@ export default function PicksPage() {
                 {currentPick.points > 0 && ` · +${currentPick.points}pts`}
               </span>
             </div>
-          )}
-
-          {notice && (
-            <p className={`text-sm ${notice.type === "ok" ? "text-green-400" : "text-red-400"}`}>
-              {notice.text}
-            </p>
           )}
 
           {/* Matchup cards — one per game */}
