@@ -33,9 +33,11 @@ send_once() {
   # The runner image is Node-only (no curl), so POST with node's global fetch.
   # A non-2xx response or a network error exits non-zero and is logged.
   ENDPOINT="$ENDPOINT" node -e '
+    // Bound each request so a hung call can never stall the poll loop.
     fetch(process.env.ENDPOINT, {
       method: "POST",
       headers: { Authorization: "Bearer " + process.env.CRON_SECRET },
+      signal: AbortSignal.timeout(30000),
     })
       .then(async (r) => {
         const body = (await r.text()).trim();
