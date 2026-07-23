@@ -7,6 +7,7 @@ import {
   dueSlots,
   buildReminderEmail,
   DEFAULT_REMINDER_CONFIG,
+  HANDLED_REMINDER_STATUSES,
 } from "@/lib/reminders";
 
 // Constant-time compare so a wrong secret can't be timed. Mismatched lengths
@@ -77,35 +78,55 @@ export async function POST(req: NextRequest) {
   );
 
   const appUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
-  const summary: { slot: string; sent: number; skipped: number }[] = [];
+  const summary: { slot: string; sent: number; skipped: number; failed: number }[] =
+    [];
   let total = 0;
 
   for (const { slot, kickoff } of slots) {
+    // A user needs this reminder if they've opted in, have an email, haven't
+    // picked, and don't already have a handled (PENDING/SENT) log for this slot.
+    // A prior FAILED log is *not* handled, so those users are re-selected here.
     const recipients = await prisma.user.findMany({
       where: {
         emailReminders: true,
         email: { not: null },
         picks: { none: { weekId: week.id } },
-        reminderLogs: { none: { weekId: week.id, slot } },
+        reminderLogs: {
+          none: {
+            weekId: week.id,
+            slot,
+            status: { in: HANDLED_REMINDER_STATUSES },
+          },
+        },
       },
       select: { id: true, email: true, displayName: true },
     });
 
     let sent = 0;
     let skipped = 0;
+    let failed = 0;
     for (const user of recipients) {
-      // Claim the (user, week, slot) row before sending. A unique-constraint
-      // conflict means a concurrent run already took it — skip.
+      // Claim the (user, week, slot) as PENDING before sending, so overlapping
+      // runs don't double-send. Two cases:
+      //   - No row yet: create it. A unique-constraint conflict (P2002) means
+      //     another run has it, or a prior FAILED row exists.
+      //   - Retry of a FAILED row: flip it FAILED -> PENDING atomically. The
+      //     status filter makes this a no-op (count 0) if a concurrent run
+      //     already reclaimed it or it's since SENT — in which case, skip.
       try {
         await prisma.reminderLog.create({
-          data: { userId: user.id, weekId: week.id, slot },
+          data: { userId: user.id, weekId: week.id, slot, status: "PENDING" },
         });
       } catch (e) {
-        if ((e as { code?: string }).code === "P2002") {
+        if ((e as { code?: string }).code !== "P2002") throw e;
+        const claimed = await prisma.reminderLog.updateMany({
+          where: { userId: user.id, weekId: week.id, slot, status: "FAILED" },
+          data: { status: "PENDING", sentAt: now },
+        });
+        if (claimed.count === 0) {
           skipped++;
           continue;
         }
-        throw e;
       }
 
       const { subject, text, html } = buildReminderEmail({
@@ -116,12 +137,32 @@ export async function POST(req: NextRequest) {
         appUrl,
         timeZone: config.timeZone,
       });
-      await sendMail({ to: user.email!, subject, text, html });
-      sent++;
+
+      // Record the send outcome so a transient SMTP failure is retried next run
+      // rather than being silently swallowed by the claim. A returned result
+      // (including the SMTP-unconfigured console fallback) counts as sent.
+      try {
+        await sendMail({ to: user.email!, subject, text, html });
+        await prisma.reminderLog.updateMany({
+          where: { userId: user.id, weekId: week.id, slot },
+          data: { status: "SENT", sentAt: new Date() },
+        });
+        sent++;
+      } catch (e) {
+        await prisma.reminderLog.updateMany({
+          where: { userId: user.id, weekId: week.id, slot },
+          data: { status: "FAILED" },
+        });
+        console.error(
+          `[reminders] send failed for user ${user.id} (${week.label} / ${slot}); will retry:`,
+          e
+        );
+        failed++;
+      }
     }
 
     total += sent;
-    summary.push({ slot, sent, skipped });
+    summary.push({ slot, sent, skipped, failed });
   }
 
   return NextResponse.json({

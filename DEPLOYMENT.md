@@ -226,6 +226,12 @@ cron job, or a GitHub Actions scheduled workflow. Example crontab (every 15 min)
 
 Lead time is tunable with `REMINDER_LEAD_HOURS` (default 3).
 
+A transient SMTP failure is not lost: the send is recorded per (user, week, slot)
+and a failed one is retried on the next poll (so a flaky mail server self-heals on
+the following run), while successful sends are never repeated. Failures are also
+logged (`[reminders] send failed …`) if you want to alert on them. The JSON
+response breaks each slot down into `sent` / `skipped` / `failed` counts.
+
 ### Known gaps (tracked separately)
 
 - **nginx reloads on a 6h timer, not on renewal** — a renewed cert can be up to
