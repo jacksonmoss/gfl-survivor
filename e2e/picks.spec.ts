@@ -57,3 +57,34 @@ test.describe("Picks", () => {
     await expect(page.getByRole("cell", { name: /Kansas City/ })).toBeVisible();
   });
 });
+
+// Weather / dome strip on the matchup cards (#69). Fixtures are seeded in
+// prisma/seed-e2e.ts: GB (outdoor, cached forecast), LAR (dome, no weather),
+// SF (outdoor, beyond the 72h window so it's never fetched → no strip).
+test.describe("Weather / dome strip", () => {
+  test.beforeEach(async ({ page }) => {
+    await loginAs(page, PLAYER1.username, PLAYER1.password);
+  });
+
+  // The matchup card containing a given team's button (abbr is first in the
+  // button's accessible name, so anchor on it).
+  const cardFor = (page: import("@playwright/test").Page, abbr: string) =>
+    page.locator("div.overflow-hidden.rounded-xl").filter({
+      has: page.getByRole("button", { name: new RegExp(`^${abbr}\\b`) }),
+    });
+
+  test("outdoor game with cached weather shows the forecast strip", async ({ page }) => {
+    await expect(cardFor(page, "GB")).toContainText("41°F · Wind 22mph NW · 70% precip");
+  });
+
+  test("dome game shows the Dome indicator", async ({ page }) => {
+    await expect(cardFor(page, "LAR")).toContainText("Dome");
+  });
+
+  test("outdoor game without cached weather shows no strip", async ({ page }) => {
+    const sf = cardFor(page, "SF");
+    await expect(sf).toBeVisible();
+    await expect(sf).not.toContainText("°F");
+    await expect(sf).not.toContainText("Dome");
+  });
+});

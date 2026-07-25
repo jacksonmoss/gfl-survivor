@@ -12,6 +12,10 @@ const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
 const twoDaysFromNow = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);
 const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+// Beyond the 72h weather lookahead — an outdoor game this far out is never
+// weather-fetched, so its card deterministically shows no forecast strip
+// regardless of whether the mount sync can reach Open-Meteo.
+const fiveDaysFromNow = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000);
 
 async function main() {
   const adminHash = await bcrypt.hash("admin123", 12);
@@ -126,7 +130,9 @@ async function main() {
     },
   });
 
-  // SF vs DAL: kicks off in 2 days → can still pick
+  // SF vs DAL: outdoor (Levi's Stadium), kicks off in 5 days → can still pick.
+  // Beyond the 72h weather window and left without cached weatherJson, so its
+  // card renders no forecast strip (the "outdoor, no weather" fixture for #69).
   await prisma.game.upsert({
     where: { externalId: "e2e-game-w2-2" },
     update: {},
@@ -135,8 +141,34 @@ async function main() {
       homeTeam: "SF",
       awayTeam: "DAL",
       status: "SCHEDULED",
-      kickoff: twoDaysFromNow,
+      kickoff: fiveDaysFromNow,
       externalId: "e2e-game-w2-2",
+    },
+  });
+
+  // GB vs CHI: outdoor (Lambeau Field), kicks off in 2 days, seeded with a
+  // deterministic forecast so the weather strip is asserted without any network
+  // dependency. fetched_at = now keeps the mount sync's ~3h cache gate from
+  // re-fetching and overwriting it. (LAR vs SEA above is the dome fixture: SoFi
+  // is indoor, so that card shows "🏟️ Dome" with no seeded weather.)
+  await prisma.game.upsert({
+    where: { externalId: "e2e-game-w2-3" },
+    update: {},
+    create: {
+      weekId: week2.id,
+      homeTeam: "GB",
+      awayTeam: "CHI",
+      status: "SCHEDULED",
+      kickoff: twoDaysFromNow,
+      externalId: "e2e-game-w2-3",
+      weatherJson: {
+        temp_f: 41,
+        wind_mph: 22,
+        wind_dir: "NW",
+        precip_chance: 70,
+        code: 3,
+        fetched_at: now.toISOString(),
+      },
     },
   });
 
