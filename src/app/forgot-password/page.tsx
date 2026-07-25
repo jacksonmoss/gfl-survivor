@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { authInput, authButton } from "@/lib/ui";
 
 export default function ForgotPasswordPage() {
   const [identifier, setIdentifier] = useState("");
@@ -22,7 +23,7 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-sm space-y-6">
+      <div className="w-full max-w-sm space-y-6 animate-fade-in-up">
         <div className="text-center">
           <h1 className="text-3xl font-bold tracking-tight">GFL Survivor</h1>
           <p className="mt-2 text-gray-400">Reset your password</p>
@@ -30,7 +31,7 @@ export default function ForgotPasswordPage() {
 
         {submitted ? (
           <div className="space-y-4">
-            <div className="rounded-md bg-green-900/50 border border-green-700 p-3 text-sm text-green-300">
+            <div className="rounded-lg bg-green-900/50 border border-green-700 p-3 text-sm text-green-300">
               If an account with an email on file matches that, a reset link is
               on its way. The link expires in 1 hour.
             </div>
@@ -47,7 +48,7 @@ export default function ForgotPasswordPage() {
             </p>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-6">
             <p className="text-sm text-gray-400">
               Enter your username or email and we&apos;ll send a reset link to
               the email on your account.
@@ -65,13 +66,13 @@ export default function ForgotPasswordPage() {
                 required
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
-                className="mt-1 block w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className={authInput}
               />
             </div>
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-md bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              className={authButton}
             >
               {loading ? "Sending..." : "Send reset link"}
             </button>

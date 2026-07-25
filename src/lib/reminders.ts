@@ -8,6 +8,8 @@
 //   - Playoffs (weeks 19-22): a single slot on the morning of the week's first
 //     game, whatever day it falls on (Wild Card weekend can start Saturday).
 
+import { formatKickoff } from "./datetime";
+
 export type ReminderSlot = "THURSDAY" | "SUNDAY" | "PLAYOFF";
 
 // Lifecycle of a single (user, week, slot) reminder. Mirrors the Prisma
@@ -179,11 +181,10 @@ export function buildReminderEmail(args: {
 }): { subject: string; text: string; html: string } {
   const { displayName, weekLabel, slot, kickoff, appUrl } = args;
   const timeZone = args.timeZone ?? DEFAULT_REMINDER_CONFIG.timeZone;
-  const when = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    weekday: "short", month: "short", day: "numeric",
-    hour: "numeric", minute: "2-digit", timeZoneName: "short",
-  }).format(kickoff);
+  // Emails have no browser, so pass the zone explicitly (defaults to ET, the
+  // schedule's native zone) and a fixed locale for deterministic output. The
+  // shared formatter appends the zone label so recipients aren't guessing (#90).
+  const when = formatKickoff(kickoff, { timeZone, locale: "en-US" });
   const picksUrl = `${appUrl.replace(/\/$/, "")}/picks`;
 
   const subject = `Don't forget your ${weekLabel} pick`;

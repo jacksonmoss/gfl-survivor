@@ -25,6 +25,20 @@ test.describe("Authentication", () => {
     await expect(page.getByRole("link", { name: "Admin" })).toBeVisible();
   });
 
+  test("sign out returns to /login on the same origin", async ({ page }) => {
+    await loginAs(page, PLAYER1.username, PLAYER1.password);
+    const origin = new URL(page.url()).origin;
+    await page.getByRole("button", { name: "Sign out" }).click();
+    await expect(page).toHaveURL(/\/login/);
+    // Must stay on the origin we loaded (regression guard for #78: signOut's
+    // default redirect resolved the callbackUrl against NEXTAUTH_URL and could
+    // send a non-localhost origin to localhost).
+    expect(new URL(page.url()).origin).toBe(origin);
+    // Session is gone: a protected route bounces back to login.
+    await page.goto("/picks");
+    await expect(page).toHaveURL(/\/login/);
+  });
+
   test("register with valid invite code then log in", async ({ page }) => {
     await page.goto("/register");
     await page.fill("#inviteCode", "E2EINVITE1");

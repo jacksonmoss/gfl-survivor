@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { useState } from "react";
 
@@ -13,8 +13,19 @@ const navLinks = [
 
 export function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { data: session } = useSession();
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // Mirror the login flow (signIn redirect:false + client-side router.push):
+  // signOut's default redirect:true resolves the callbackUrl against
+  // NEXTAUTH_URL server-side and returns an absolute URL, so from a non-localhost
+  // origin (LAN IP, alternate hostname) it lands on localhost/login. redirect:false
+  // + a relative push keeps logout on the same origin. (#78)
+  const handleSignOut = async () => {
+    await signOut({ redirect: false });
+    router.push("/login");
+  };
 
   return (
     <nav className="border-b border-gray-800 bg-gray-900">
@@ -58,7 +69,7 @@ export function Navbar() {
         <div className="hidden sm:flex items-center gap-4">
           <span className="text-sm text-gray-400">{session?.user?.name}</span>
           <button
-            onClick={() => signOut({ callbackUrl: "/login" })}
+            onClick={handleSignOut}
             className="text-sm text-gray-400 hover:text-white"
           >
             Sign out
@@ -115,7 +126,7 @@ export function Navbar() {
           <div className="mt-3 border-t border-gray-800 px-4 pt-3">
             <div className="text-sm text-gray-400 mb-2">{session?.user?.name}</div>
             <button
-              onClick={() => signOut({ callbackUrl: "/login" })}
+              onClick={handleSignOut}
               className="text-sm text-gray-400 hover:text-white"
             >
               Sign out

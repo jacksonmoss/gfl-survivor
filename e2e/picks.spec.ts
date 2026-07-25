@@ -56,4 +56,77 @@ test.describe("Picks", () => {
     await expect(page.getByRole("cell", { name: /Week 1/ }).first()).toBeVisible();
     await expect(page.getByRole("cell", { name: /Kansas City/ })).toBeVisible();
   });
+
+  test("upcoming matchup shows a kickoff time with a timezone label", async ({ page }) => {
+    // SF vs DAL kicks off in 5 days (not started), so its card shows the kickoff
+    // time rather than "In progress". The time must carry a zone token so the
+    // viewer knows it's their local time (#90). Zone label is a short abbr
+    // (e.g. PDT/EST/UTC) or a GMT±offset, depending on the runtime timezone.
+    const card = page.locator("div.overflow-hidden.rounded-xl").filter({
+      has: page.getByRole("button", { name: /^SF\b/ }),
+    });
+    await expect(card).toContainText(/\d{1,2}:\d{2}\s?(AM|PM).*\b(?:[A-Z]{2,5}|GMT[+-]\d{1,2})\b/);
+  });
+});
+
+// Weather / dome strip on the matchup cards (#69). Fixtures are seeded in
+// prisma/seed-e2e.ts: GB (outdoor, cached forecast), LAR (dome, no weather),
+// SF (outdoor, beyond the 72h window so it's never fetched → no strip).
+test.describe("Weather / dome strip", () => {
+  test.beforeEach(async ({ page }) => {
+    await loginAs(page, PLAYER1.username, PLAYER1.password);
+  });
+
+  // The matchup card containing a given team's button (abbr is first in the
+  // button's accessible name, so anchor on it).
+  const cardFor = (page: import("@playwright/test").Page, abbr: string) =>
+    page.locator("div.overflow-hidden.rounded-xl").filter({
+      has: page.getByRole("button", { name: new RegExp(`^${abbr}\\b`) }),
+    });
+
+  test("outdoor game with cached weather shows the forecast strip", async ({ page }) => {
+    await expect(cardFor(page, "GB")).toContainText("41°F · Wind 22mph NW · 70% precip");
+  });
+
+  test("dome game shows the Dome indicator", async ({ page }) => {
+    await expect(cardFor(page, "LAR")).toContainText("Dome");
+  });
+
+  test("outdoor game without cached weather shows no strip", async ({ page }) => {
+    const sf = cardFor(page, "SF");
+    await expect(sf).toBeVisible();
+    await expect(sf).not.toContainText("°F");
+    await expect(sf).not.toContainText("Dome");
+  });
+});
+
+// Betting-spread strip on the matchup cards (#72). Fixtures are seeded in
+// prisma/seed-e2e.ts: GB vs CHI carries spreadHome = -6.5 (GB favored), so the
+// home side renders "-6.5" and the away side "+6.5"; SF vs DAL has no spread, so
+// its card renders no strip. Spreads come straight from the seeded
+// Game.spreadHome — no live Odds API call.
+test.describe("Betting-spread strip", () => {
+  test.beforeEach(async ({ page }) => {
+    await loginAs(page, PLAYER1.username, PLAYER1.password);
+  });
+
+  const cardFor = (page: import("@playwright/test").Page, abbr: string) =>
+    page.locator("div.overflow-hidden.rounded-xl").filter({
+      has: page.getByRole("button", { name: new RegExp(`^${abbr}\\b`) }),
+    });
+
+  test("game with a seeded spread shows favorite and underdog lines", async ({ page }) => {
+    const card = cardFor(page, "GB");
+    // Each side renders its spread in a div[title="Vegas spread"]: GB -6.5, CHI +6.5.
+    const spreads = card.locator('[title="Vegas spread"]');
+    await expect(spreads).toHaveCount(2);
+    await expect(card).toContainText("-6.5");
+    await expect(card).toContainText("+6.5");
+  });
+
+  test("game without a spread shows no spread line", async ({ page }) => {
+    const card = cardFor(page, "SF");
+    await expect(card).toBeVisible();
+    await expect(card.locator('[title="Vegas spread"]')).toHaveCount(0);
+  });
 });

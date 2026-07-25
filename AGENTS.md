@@ -38,7 +38,7 @@ Next's startup banner prints `Network: http://0.0.0.0:3000` (it doesn't resolve 
 
 **Cross-origin dev assets** — Next 16 blocks its dev-only assets (HMR, client JS chunks) from any origin other than `localhost` by default. Loaded from a LAN IP without allowlisting it, **the page HTML renders but the client never hydrates** — and the login form then silently falls back to a native `GET /login?username=…&password=…` (the `onSubmit`/`signIn()` handler never runs), so sign-in appears to "do nothing." `next.config.ts` allowlists the common private ranges via `allowedDevOrigins: ["192.168.*.*", "10.*.*.*"]` (dev-only; no effect on production builds), so `pnpm dev:lan` works out of the box on a typical home network. If your Wi-Fi hands out a different range (e.g. `172.x`), add it there. Next's matcher is per-segment, so `*` matches exactly one segment.
 
-**Login works over the LAN IP with no env changes** — leave `NEXTAUTH_URL="http://localhost:3000"`. Verified empirically: sign-in uses `signIn(..., redirect: false)` + a client-side `router.push`, and the session cookie is host-scoped and non-`Secure` over plain http, so signing in from `http://192.168.x.x:3000` sets the cookie correctly and `/api/auth/session` returns the user. `NEXTAUTH_URL` only affects **absolute** URLs. Known caveats that resolve against it (and so point at `localhost`): password-reset and reminder **email links**, and — currently a bug — **logout** (`signOut({ callbackUrl })` returns an absolute URL, so it redirects to `localhost/login`; tracked in #78). For layout testing this is harmless; to exercise those from the phone, temporarily set `NEXTAUTH_URL` to the LAN IP.
+**Login works over the LAN IP with no env changes** — leave `NEXTAUTH_URL="http://localhost:3000"`. Verified empirically: sign-in uses `signIn(..., redirect: false)` + a client-side `router.push`, and the session cookie is host-scoped and non-`Secure` over plain http, so signing in from `http://192.168.x.x:3000` sets the cookie correctly and `/api/auth/session` returns the user. `NEXTAUTH_URL` only affects **absolute** URLs. Known caveats that resolve against it (and so point at `localhost`): password-reset and reminder **email links**. (Logout used to have this bug too — `signOut({ callbackUrl })` returned an absolute URL and redirected to `localhost/login`; fixed in #78 by mirroring login's `signOut({ redirect: false })` + client-side `router.push("/login")` in `src/components/navbar.tsx`, so logout now stays on the loaded origin.) For layout testing this is harmless; to exercise the email links from the phone, temporarily set `NEXTAUTH_URL` to the LAN IP.
 
 Gotchas: your OS/router firewall must allow inbound `:3000` on the LAN; some networks (guest Wi-Fi, "AP isolation") block device-to-device traffic. Docker/Postgres needs no change — the phone talks to Next.js, which talks to the DB on the host.
 
@@ -128,6 +128,7 @@ src/
     ├── types.ts                    # NextAuth session/JWT type augmentation
     ├── prisma.ts                   # Singleton PrismaClient with PrismaPg adapter
     ├── teams.ts                    # pure team-name validation (trim/blank/collision/self-rename); route delegates to it (tested)
+    ├── datetime.ts                 # pure formatKickoff — date+time with a timezone label; shared by picks UI + reminder emails (tested)
     └── nfl-teams.ts                # All 32 NFL teams with abbreviations, names, conference, division
 ```
 
@@ -191,6 +192,8 @@ Team ── User[] (members, for team trophy standings)
 - **Session behavior** (#23) — auth uses **stateless JWT sessions** (`src/lib/auth.ts`, `session.strategy: "jwt"`), *not* database-backed sessions. The session is a signed cookie (signed with `NEXTAUTH_SECRET` from `.env`); there is no server-side session store. **Consequence: restarting the app (dev server or `docker compose down/up`) does NOT log users out** — the JWT is self-contained and keeps validating as long as `NEXTAUTH_SECRET` is unchanged. This is **by design**, the standard JWT-vs-DB-session tradeoff (redeploys don't sign users out), not a bug. `maxAge` is set **explicitly** to NextAuth's 30-day default (`30 * 24 * 60 * 60`): long enough that weekly mobile users stay signed in between picks, short enough that abandoned sessions expire — decided against a shorter window to avoid nagging re-logins. Rotating `NEXTAUTH_SECRET` invalidates all existing sessions (the only server-side "log everyone out" lever); switching to DB sessions (Prisma adapter) would let a restart invalidate sessions but is a much bigger change and not worth it here.
 - **Accessibility** (#54) — the picks + leaderboard interactive UI carries explicit a11y semantics, so status is never color/glyph-alone and everything works with a keyboard/screen reader. A **shared focus ring** lives in `src/lib/ui.ts` (`focusRing` with a gray-950 offset; `focusRingInset` for controls inside an `overflow-hidden` container like the split matchup buttons) — `focus-visible` so it only shows for keyboard/AT users. Picks page: the week `<select>` badges are **words** (`— Won/Lost/Picked`, not bare `✓/✗/•`) since `<option>`s can't hold `sr-only` markup; team buttons expose `aria-pressed` + an `aria-label` that **keeps the abbr first** (`"SF San Francisco 49ers, your pick"` — the E2E suite selects buttons by abbr, so the abbr must stay in the accessible name); the "Season picks" collapsible has `aria-expanded`/`aria-controls` with an `aria-hidden` chevron; a visually-hidden `role="status" aria-live="polite"` region announces live/final score changes (the string only changes when a score/status does, so silent polls stay silent). Leaderboard: the Players/Team-Trophy tabs are a real `role="tablist"` with roving `tabindex` + Arrow-key nav + `aria-selected`/`aria-controls`, panels are `role="tabpanel"`; Show/Hide Picks is `aria-pressed`; expandable player rows are keyboard-activatable (`role="button"`, `tabIndex`, Enter/Space, `aria-expanded`); the per-pick result glyph gets an `sr-only` word (`Win/Loss/Pending`) with the glyph `aria-hidden`. Verified with axe (0 serious/critical violations from the semantics) + the desktop E2E suite. **Known gap:** app-wide muted-text **color contrast** (`text-gray-500`/`gray-600` on `gray-950`) is below WCAG AA — pre-existing and a visual-restyle concern (pairs with the #12 design system), tracked in #96, deliberately out of scope for this semantics pass.
 
+- **Kickoff time display** (#90) — `Game.kickoff` is stored as an absolute UTC instant, so showing a time is purely a display concern. All kickoff rendering goes through one pure helper, `formatKickoff` in `src/lib/datetime.ts`, which **always appends a short timezone label** (`Sun, Sep 7, 10:00 AM PDT`) so the zone is never ambiguous. In the **client** picks UI it's called with no options → the browser's own locale + timezone (times are formatted after fetch, so there's no SSR/hydration drift; any future *server*-rendered kickoff must pass an explicit `timeZone`). **Reminder emails** have no browser, so `buildReminderEmail` passes an explicit `timeZone` (defaults to `America/New_York`, the schedule's native zone — see the closed #50 on scheduling staying Eastern) and a fixed `locale: "en-US"` for deterministic output. Per-recipient email localization (a stored `User.timeZone` preference) is the fuller fix deferred to #106; today emails label ET explicitly.
+
 ## Workflow
 
 - **Open follow-up tickets for known gaps.** When finishing a task, note any
@@ -237,8 +240,8 @@ Team ── User[] (members, for team trophy standings)
 
 - [ ] **Tie handling** — score sync currently picks the home team as winner on ties. NFL regular season games can't tie (overtime rules), but worth verifying edge cases.
 - [ ] **CI security scanning** — #26: add dependency vulnerability scanning (osv-scanner/npm audit) and consider CodeQL/secret scanning to `.github/workflows/ci.yml`, alongside the existing lint/test/build job.
-- [ ] **Weather follow-ups** (split from #16): #67 populate weather via cron (not just on picks-page load), #69 E2E coverage + seed fixture for the weather/dome strip.
-- [ ] **Betting-spread follow-ups** (split from #17): #72 E2E + seed coverage for the spread strip, #73 make the odds refresh gate multi-instance safe, #74 populate spreads via cron (coordinate with #67).
+- [ ] **Weather follow-ups** (split from #16): #101 refresh weather **and** spreads via cron (not just on picks-page load) — combines the former #67/#74. (#69 E2E coverage + seed fixture for the weather/dome strip: done.)
+- [ ] **Betting-spread follow-ups** (split from #17): #73 make the odds refresh gate multi-instance safe, #101 populate spreads via cron (combined with weather, was #74). (#72 E2E + seed coverage for the spread strip: done.)
 
 ## Testing
 
@@ -254,7 +257,8 @@ src/__tests__/
 ├── stadiums.test.ts        # Stadium table integrity, exact indoor set (SEA outdoor regression) — src/lib/stadiums.ts
 ├── weather.test.ts         # Open-Meteo URL/parse, cache staleness, compass/icon/format — src/lib/weather.ts
 ├── odds.test.ts            # Odds-API URL/parse, median spread, refresh gate, spread display format — src/lib/odds.ts
-└── teams.test.ts           # Team name validation (trim, blank, collision, self-rename) — src/lib/teams.ts
+├── teams.test.ts           # Team name validation (trim, blank, collision, self-rename) — src/lib/teams.ts
+└── datetime.test.ts        # formatKickoff zone/label output across timezones — src/lib/datetime.ts
 ```
 
 These cover the core business logic extracted from API routes: kickoff locking, pick visibility (own picks always visible, admin sees all, others hidden until kickoff), grading (WIN/LOSS determination), playoff point escalation, and team-name validation. **When you add or change logic, extract it to a `lib/` helper and unit-test it in the same change — don't leave it inline in the route and don't defer coverage to a follow-up ticket.** API routes aren't unit-tested directly (they depend on Prisma/NextAuth); the E2E suite exercises them through the UI instead.
@@ -268,7 +272,7 @@ e2e/
 ├── global-setup.ts     # drops/recreates a throwaway `gfl_e2e` DB, runs migrate deploy + seed-e2e
 ├── helpers.ts          # ADMIN/PLAYER1 creds, loginAs(page, ...)
 ├── auth.spec.ts        # login/register/logout
-├── picks.spec.ts       # pick submit/change/lock
+├── picks.spec.ts       # pick submit/change/lock + weather/dome strip (#69) + betting-spread strip (#72) + kickoff TZ label (#90)
 ├── leaderboard.spec.ts # standings + team trophy
 ├── z-admin.spec.ts     # admin panel: invites, season create, team create + rename
 ├── password-reset.spec.ts

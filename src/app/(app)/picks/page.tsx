@@ -7,6 +7,7 @@ import { isIndoorStadium } from "@/lib/stadiums";
 import { formatWeather, weatherIcon } from "@/lib/weather";
 import type { GameWeather } from "@/lib/weather";
 import { formatSpread } from "@/lib/odds";
+import { formatKickoff } from "@/lib/datetime";
 import { focusRing, focusRingInset } from "@/lib/ui";
 import { useToast } from "@/components/toast";
 
@@ -270,10 +271,9 @@ export default function PicksPage() {
                   const awayUsed = usedTeams.includes(game.awayTeam) && !awayPicked;
                   const homeUsed = usedTeams.includes(game.homeTeam) && !homePicked;
 
-                  const kickoffStr = new Date(game.kickoff).toLocaleString([], {
-                    weekday: "short", month: "short", day: "numeric",
-                    hour: "numeric", minute: "2-digit",
-                  });
+                  // Browser locale + timezone, with a zone label so the viewer
+                  // can tell it's their local time (#90).
+                  const kickoffStr = formatKickoff(game.kickoff);
 
                   return (
                     <div key={game.id} className="rounded-xl border border-white/10 overflow-hidden">
