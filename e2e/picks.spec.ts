@@ -56,6 +56,17 @@ test.describe("Picks", () => {
     await expect(page.getByRole("cell", { name: /Week 1/ }).first()).toBeVisible();
     await expect(page.getByRole("cell", { name: /Kansas City/ })).toBeVisible();
   });
+
+  test("upcoming matchup shows a kickoff time with a timezone label", async ({ page }) => {
+    // SF vs DAL kicks off in 5 days (not started), so its card shows the kickoff
+    // time rather than "In progress". The time must carry a zone token so the
+    // viewer knows it's their local time (#90). Zone label is a short abbr
+    // (e.g. PDT/EST/UTC) or a GMT±offset, depending on the runtime timezone.
+    const card = page.locator("div.overflow-hidden.rounded-xl").filter({
+      has: page.getByRole("button", { name: /^SF\b/ }),
+    });
+    await expect(card).toContainText(/\d{1,2}:\d{2}\s?(AM|PM).*\b(?:[A-Z]{2,5}|GMT[+-]\d{1,2})\b/);
+  });
 });
 
 // Weather / dome strip on the matchup cards (#69). Fixtures are seeded in
