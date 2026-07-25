@@ -3,6 +3,11 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { validateTeamName } from "@/lib/teams";
+import { Prisma } from "@/generated/prisma/client";
+
+function isUniqueViolation(e: unknown): boolean {
+  return e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002";
+}
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -35,8 +40,15 @@ export async function POST(req: NextRequest) {
     const existing = trimmed ? await prisma.team.findUnique({ where: { name: trimmed } }) : null;
     const check = validateTeamName(teamName, existing);
     if (!check.ok) return NextResponse.json({ error: check.error }, { status: 400 });
-    const team = await prisma.team.create({ data: { name: check.name } });
-    return NextResponse.json(team);
+    try {
+      const team = await prisma.team.create({ data: { name: check.name } });
+      return NextResponse.json(team);
+    } catch (e) {
+      if (isUniqueViolation(e)) {
+        return NextResponse.json({ error: "Team name already taken" }, { status: 400 });
+      }
+      throw e;
+    }
   }
 
   if (action === "rename") {
@@ -47,8 +59,15 @@ export async function POST(req: NextRequest) {
     const existing = trimmed ? await prisma.team.findUnique({ where: { name: trimmed } }) : null;
     const check = validateTeamName(teamName, existing, teamId);
     if (!check.ok) return NextResponse.json({ error: check.error }, { status: 400 });
-    const team = await prisma.team.update({ where: { id: teamId }, data: { name: check.name } });
-    return NextResponse.json(team);
+    try {
+      const team = await prisma.team.update({ where: { id: teamId }, data: { name: check.name } });
+      return NextResponse.json(team);
+    } catch (e) {
+      if (isUniqueViolation(e)) {
+        return NextResponse.json({ error: "Team name already taken" }, { status: 400 });
+      }
+      throw e;
+    }
   }
 
   if (action === "assign") {
