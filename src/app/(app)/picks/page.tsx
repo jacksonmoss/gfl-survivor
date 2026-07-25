@@ -6,6 +6,9 @@ import { getTeamName, getLogoUrl } from "@/lib/nfl-teams";
 import { isIndoorStadium } from "@/lib/stadiums";
 import { formatWeather, weatherIcon } from "@/lib/weather";
 import type { GameWeather } from "@/lib/weather";
+import { formatSpread } from "@/lib/odds";
+import { focusRing, focusRingInset } from "@/lib/ui";
+import { useToast } from "@/components/toast";
 
 interface Game {
   id: string;
@@ -16,6 +19,7 @@ interface Game {
   status: string;
   kickoff: string;
   weatherJson: GameWeather | null;
+  spreadHome: number | null;
 }
 
 interface Week {
@@ -53,16 +57,24 @@ function resultColor(result: string) {
   return "text-gray-500";
 }
 
+// Word form of a pick result, so status is never conveyed by color/glyph alone
+// (used in the week <select> options, which can't hold sr-only markup).
+function resultWord(result: string) {
+  if (result === "WIN") return "Won";
+  if (result === "LOSS") return "Lost";
+  return "Picked";
+}
+
 export default function PicksPage() {
   const [season, setSeason] = useState<Season | null>(null);
   const [picks, setPicks] = useState<Pick[]>([]);
   const [usedTeams, setUsedTeams] = useState<string[]>([]);
   const [selectedWeek, setSelectedWeek] = useState<Week | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [notice, setNotice] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [loading, setLoading] = useState(true);
   const weekRef = useRef<string | null>(null);
+  const toast = useToast();
 
   const load = useCallback(async (keepWeek = false) => {
     let data;
@@ -122,7 +134,6 @@ export default function PicksPage() {
     if (!selectedWeek) return;
     const week = selectedWeek;
     setSubmitting(true);
-    setNotice(null);
 
     // Optimistic update — reflect the pick instantly, then reconcile with the
     // server (or roll back on error). The current-pick card keys off the team,
@@ -147,13 +158,13 @@ export default function PicksPage() {
     });
     const data = await res.json();
     if (res.ok) {
-      setNotice({ type: "ok", text: `Picked ${getTeamName(team)}` });
+      toast.success(`Picked ${getTeamName(team)}`);
       load(true);
     } else {
       // Roll back the optimistic update.
       setPicks(prevPicks);
       setUsedTeams(prevUsed);
-      setNotice({ type: "err", text: data.error });
+      toast.error(data.error);
     }
     setSubmitting(false);
   }
@@ -186,23 +197,36 @@ export default function PicksPage() {
       </div>
 
       <select
+        aria-label="Select week"
         value={selectedWeek?.id ?? ""}
         onChange={(e) => {
           const w = season.weeks.find((w) => w.id === e.target.value);
-          if (w) { setSelectedWeek(w); weekRef.current = w.id; setNotice(null); }
+          if (w) { setSelectedWeek(w); weekRef.current = w.id; }
         }}
-        className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+        className={`w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none ${focusRing}`}
       >
         {season.weeks.map((week) => {
           const p = picks.find((p) => p.weekId === week.id);
           const label = week.isPlayoff ? `${week.label} (${week.pointValue}pt)` : `Week ${week.weekNumber}`;
-          const badge = p ? (p.result === "WIN" ? " ✓" : p.result === "LOSS" ? " ✗" : " •") : "";
+          const badge = p ? ` — ${resultWord(p.result)}` : "";
           return <option key={week.id} value={week.id}>{label}{badge}</option>;
         })}
       </select>
 
       {selectedWeek && (
         <>
+          {/* Screen-reader announcement for live/final score changes. The string
+              only changes when a score or status changes, so polling that returns
+              no change stays silent. */}
+          <div className="sr-only" role="status" aria-live="polite">
+            {selectedWeek.games
+              .filter((g) => g.status === "LIVE" || g.status === "FINAL")
+              .map((g) =>
+                `${getTeamName(g.awayTeam)} ${g.awayScore ?? 0}, ${getTeamName(g.homeTeam)} ${g.homeScore ?? 0}, ${g.status === "LIVE" ? "in progress" : "final"}.`
+              )
+              .join(" ")}
+          </div>
+
           {/* Current pick summary */}
           {currentPick && (
             <div key={currentPick.team} className={`animate-pop rounded-xl border px-4 py-3 flex items-center justify-between ${
@@ -226,12 +250,6 @@ export default function PicksPage() {
             </div>
           )}
 
-          {notice && (
-            <p className={`text-sm ${notice.type === "ok" ? "text-green-400" : "text-red-400"}`}>
-              {notice.text}
-            </p>
-          )}
-
           {/* Matchup cards — one per game */}
           {selectedWeek.games.length > 0 ? (
             <div className="space-y-2">
@@ -245,6 +263,8 @@ export default function PicksPage() {
                   // Hide the forecast once the game is final — the cached
                   // forecast is pre-game and would read as stale/current.
                   const weather = game.status === "FINAL" ? null : game.weatherJson;
+                  // Spread is pre-game context — hide it once the game is final.
+                  const spreadHome = game.status === "FINAL" ? null : game.spreadHome;
                   const awayPicked = currentPick?.team === game.awayTeam;
                   const homePicked = currentPick?.team === game.homeTeam;
                   const awayUsed = usedTeams.includes(game.awayTeam) && !awayPicked;
@@ -260,6 +280,7 @@ export default function PicksPage() {
                       <div className="flex divide-x divide-white/10">
                         <TeamSide
                           abbr={game.awayTeam}
+                          spread={spreadHome === null ? null : formatSpread(spreadHome, false)}
                           isPicked={awayPicked}
                           isUsed={awayUsed}
                           disabled={submitting || currentPickLocked || gameLocked || awayUsed}
@@ -267,6 +288,7 @@ export default function PicksPage() {
                         />
                         <TeamSide
                           abbr={game.homeTeam}
+                          spread={spreadHome === null ? null : formatSpread(spreadHome, true)}
                           isPicked={homePicked}
                           isUsed={homeUsed}
                           disabled={submitting || currentPickLocked || gameLocked || homeUsed}
@@ -314,13 +336,15 @@ export default function PicksPage() {
           <div className="space-y-2">
             <button
               onClick={() => setShowHistory((v) => !v)}
-              className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-300 transition-colors uppercase tracking-wider"
+              aria-expanded={showHistory}
+              aria-controls="season-picks-panel"
+              className={`flex items-center gap-1.5 rounded text-xs font-medium text-gray-500 hover:text-gray-300 transition-colors uppercase tracking-wider ${focusRing}`}
             >
-              <span className={`transition-transform ${showHistory ? "rotate-90" : ""}`}>▶</span>
+              <span aria-hidden="true" className={`transition-transform ${showHistory ? "rotate-90" : ""}`}>▶</span>
               Season picks
             </button>
             {showHistory && (
-              <div className="rounded-xl border border-white/10 overflow-hidden">
+              <div id="season-picks-panel" className="rounded-xl border border-white/10 overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-white/10 bg-white/5">
@@ -387,19 +411,26 @@ function TeamLogo({ abbr, size = 40 }: { abbr: string; size?: number }) {
 }
 
 function TeamSide({
-  abbr, isPicked, isUsed, disabled, onPick,
+  abbr, spread, isPicked, isUsed, disabled, onPick,
 }: {
   abbr: string;
+  spread: string | null;
   isPicked: boolean;
   isUsed: boolean;
   disabled: boolean;
   onPick: () => void;
 }) {
+  // Keep the abbreviation in the accessible name (the E2E suite selects team
+  // buttons by abbr), then append the full name and pick/used state so a screen
+  // reader announces which team and its status rather than a bare glyph.
+  const state = isPicked ? ", your pick" : isUsed ? ", already used this season" : "";
   return (
     <button
       disabled={disabled}
       onClick={onPick}
-      className={`flex-1 px-3 py-4 text-center transition-all active:scale-95 ${
+      aria-pressed={isPicked}
+      aria-label={`${abbr} ${getTeamName(abbr)}${state}`}
+      className={`flex-1 px-3 py-4 text-center transition-all active:scale-95 ${focusRingInset} ${
         isPicked
           ? "bg-blue-900/40 text-white"
           : disabled
@@ -414,6 +445,9 @@ function TeamSide({
       <div className="text-xs mt-0.5 leading-snug">
         {getTeamName(abbr)}
       </div>
+      {spread !== null && (
+        <div className="mt-1 text-[11px] tabular-nums text-gray-500" title="Vegas spread">{spread}</div>
+      )}
       {isUsed && <div className="mt-1.5 text-xs text-gray-600">Used</div>}
       {isPicked && !isUsed && <div className="mt-1.5 text-xs text-blue-400">✓ Your pick</div>}
     </button>

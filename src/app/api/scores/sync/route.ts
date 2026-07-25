@@ -9,6 +9,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { getStadium } from "@/lib/stadiums";
 import { buildOpenMeteoUrl, parseWeatherResponse, shouldFetchWeather } from "@/lib/weather";
 import type { GameWeather } from "@/lib/weather";
+import { refreshOddsForGames } from "@/lib/odds-sync";
 
 let lastSyncTime = 0;
 const SYNC_COOLDOWN_MS = 30_000;
@@ -146,5 +147,18 @@ export async function POST() {
   );
   const weatherUpdated = weatherResults.filter((r) => r.status === "fulfilled" && r.value).length;
 
-  return NextResponse.json({ synced, graded, weather: weatherUpdated, week: currentWeek.weekNumber });
+  // Refresh betting spreads (bulk single call, gated to every ~6h). Reads the
+  // freshly-synced status so a game that just started/finished is excluded.
+  const spreadsUpdated = await refreshOddsForGames(
+    currentWeek.games.map((g) => ({
+      id: g.id,
+      homeTeam: g.homeTeam,
+      awayTeam: g.awayTeam,
+      status: statusById.get(g.id) ?? g.status,
+      kickoff: g.kickoff,
+    })),
+    nowDate,
+  );
+
+  return NextResponse.json({ synced, graded, weather: weatherUpdated, spreads: spreadsUpdated, week: currentWeek.weekNumber });
 }

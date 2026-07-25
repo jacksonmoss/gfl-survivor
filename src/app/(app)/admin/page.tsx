@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useToast } from "@/components/toast";
 
 interface AdminUser {
   id: string;
@@ -33,6 +34,7 @@ export default function AdminPage() {
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [loading, setLoading] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
+  const toast = useToast();
 
   // Players tab
   const [resetUserId, setResetUserId] = useState("");
@@ -40,7 +42,6 @@ export default function AdminPage() {
 
   // Teams tab
   const [newTeamName, setNewTeamName] = useState("");
-  const [teamMsg, setTeamMsg] = useState("");
   const [assignUserId, setAssignUserId] = useState("");
   const [assignTeamId, setAssignTeamId] = useState("");
   const [renameTeamId, setRenameTeamId] = useState<string | null>(null);
@@ -119,7 +120,6 @@ export default function AdminPage() {
     e.preventDefault();
     if (!newTeamName.trim()) return;
     setLoading(true);
-    setTeamMsg("");
     const res = await fetch("/api/teams", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -128,10 +128,10 @@ export default function AdminPage() {
     const data = await res.json();
     if (res.ok) {
       setNewTeamName("");
-      setTeamMsg(`Created "${data.name}"`);
+      toast.success(`Created "${data.name}"`);
       await loadAll();
     } else {
-      setTeamMsg(data.error);
+      toast.error(data.error);
     }
     setLoading(false);
   }
@@ -139,22 +139,26 @@ export default function AdminPage() {
   async function assignMember() {
     if (!assignUserId || !assignTeamId) return;
     setLoading(true);
-    await fetch("/api/teams", {
+    const res = await fetch("/api/teams", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "assign", userId: assignUserId, teamId: assignTeamId }),
     });
+    if (res.ok) toast.success("Player assigned");
+    else toast.error((await res.json()).error);
     await loadAll();
     setLoading(false);
   }
 
   async function unassignMember(userId: string) {
     setLoading(true);
-    await fetch("/api/teams", {
+    const res = await fetch("/api/teams", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "unassign", userId }),
     });
+    if (res.ok) toast.success("Player removed from team");
+    else toast.error((await res.json()).error);
     await loadAll();
     setLoading(false);
   }
@@ -162,7 +166,6 @@ export default function AdminPage() {
   async function renameTeam(teamId: string) {
     if (!renameValue.trim()) return;
     setLoading(true);
-    setTeamMsg("");
     const res = await fetch("/api/teams", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -172,9 +175,10 @@ export default function AdminPage() {
     if (res.ok) {
       setRenameTeamId(null);
       setRenameValue("");
+      toast.success(`Renamed to "${data.name}"`);
       await loadAll();
     } else {
-      setTeamMsg(data.error);
+      toast.error(data.error);
     }
     setLoading(false);
   }
@@ -182,11 +186,13 @@ export default function AdminPage() {
   async function deleteTeam(teamId: string) {
     if (!confirm("Delete this team? Members will be unassigned.")) return;
     setLoading(true);
-    await fetch("/api/teams", {
+    const res = await fetch("/api/teams", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "delete", teamId }),
     });
+    if (res.ok) toast.success("Team deleted");
+    else toast.error((await res.json()).error);
     await loadAll();
     setLoading(false);
   }
@@ -371,7 +377,6 @@ export default function AdminPage() {
                 Create
               </button>
             </form>
-            {teamMsg && <p className="text-sm text-gray-400">{teamMsg}</p>}
           </div>
 
           {/* Assign member */}

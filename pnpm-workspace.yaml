@@ -7,13 +7,23 @@ allowBuilds:
 
 overrides:
   postcss: "^8.5.10"
-  "@hono/node-server": "^1.19.13"
+  "@hono/node-server": "^2.0.5" # GHSA-frvp-7c67-39w9 (via @prisma/dev, dev-only)
   uuid: "^11.1.1"
   # Security floors for transitive deps (CVE fixes; see osv-scanner findings).
   hono: "^4.12.25" # GHSA-88fw-hqm2-52qc et al. (via @prisma/dev, dev-only)
   js-yaml: "^4.2.0" # GHSA-h67p-54hq-rp68 (via eslint, dev-only)
   esbuild: "^0.28.1" # GHSA-g7r4-m6w7-qqqr (via vite/tsx, dev-only)
   vite: "^8.0.16" # GHSA-fx2h-pf6j-xcff, GHSA-v6wh-96g9-6wx3 (via vitest, dev-only)
+  fast-uri: "^3.1.4" # GHSA-v2hh-gcrm-f6hx (via prisma > ajv, dev-only)
+  find-my-way: "^9.7.0" # GHSA-c96f-x56v-gq3h (via @prisma/dev, dev-only)
+  valibot: "^1.4.2" # GHSA-5qjj-4xww-7phc (via @prisma/dev, dev-only)
+  # GHSA-mh99-v99m-4gvg (new brace-expansion OOM DoS) has no fix compatible with
+  # the old minimatch@3 that eslint pulls in (its only fixed version, 5.0.8, is
+  # ESM-only and breaks minimatch@3's CJS require). It's dev-only and the glob
+  # input is developer-authored, not attacker-reachable — suppressed with an
+  # expiry in osv-scanner.toml. 1.1.16 still covers the earlier GHSA-3jxr-9vmj-r5cp.
+  brace-expansion: "^1.1.16" # GHSA-3jxr-9vmj-r5cp (via eslint > minimatch, dev-only)
+  sharp: "^0.35.0" # GHSA-f88m-g3jw-g9cj / libvips CVEs (via next image optimization)
 
 peerDependencyRules:
   allowedVersions:

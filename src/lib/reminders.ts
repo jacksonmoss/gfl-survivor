@@ -10,6 +10,26 @@
 
 export type ReminderSlot = "THURSDAY" | "SUNDAY" | "PLAYOFF";
 
+// Lifecycle of a single (user, week, slot) reminder. Mirrors the Prisma
+// `ReminderStatus` enum; kept as string literals here so this module stays pure.
+//   PENDING — claimed, send in flight (or the process died mid-send)
+//   SENT    — send returned (includes the console fallback when SMTP is off)
+//   FAILED  — send threw; eligible to be retried on a later run
+export type ReminderSendStatus = "PENDING" | "SENT" | "FAILED";
+
+/**
+ * Statuses that mean a reminder is already handled and must NOT be re-sent —
+ * either delivered (SENT) or in flight (PENDING). FAILED is deliberately absent,
+ * so a failed send is re-selected and retried on the next run. This is the single
+ * source of truth for the route's recipient query and its re-claim filter.
+ */
+export const HANDLED_REMINDER_STATUSES: ReminderSendStatus[] = ["PENDING", "SENT"];
+
+/** Whether a reminder in this status should be retried on a subsequent run. */
+export function isReminderRetryable(status: ReminderSendStatus): boolean {
+  return !HANDLED_REMINDER_STATUSES.includes(status);
+}
+
 export interface ReminderConfig {
   /** IANA timezone the NFL schedule is reasoned about in. */
   timeZone: string;

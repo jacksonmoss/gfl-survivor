@@ -7,20 +7,34 @@ migrations are applied by a one-shot `migrate` service before the app starts.
 ## Prerequisites
 
 - Docker Engine with the Compose plugin (`docker compose`)
-- A host reachable on port 80 (add TLS in front — see below)
+- A public domain pointed at this host (DNS `A`/`AAAA` record) with ports 80 and
+  443 reachable from the internet — nginx terminates HTTPS (see [TLS](#tls))
 
 ## Configure
 
 ```bash
 cp .env.prod.example .env.prod
-# edit .env.prod: set POSTGRES_PASSWORD, DATABASE_URL, NEXTAUTH_URL,
-# and NEXTAUTH_SECRET (openssl rand -base64 32)
+# edit .env.prod: set POSTGRES_PASSWORD, DATABASE_URL, DOMAIN, CERTBOT_EMAIL,
+# NEXTAUTH_URL (the https:// DOMAIN), and NEXTAUTH_SECRET (openssl rand -base64 32)
 ```
 
 `NEXTAUTH_SECRET` is **required**. The app fails fast on startup
 (`src/instrumentation.ts`) with a clear error if it is missing in production.
 
+Optional: `ODDS_API_KEY` ([The Odds API](https://the-odds-api.com/), free tier
+500 req/month) enables the betting-spread strip on matchup cards. When unset,
+cards simply omit the spread — no error. See `.env.example`.
+
 ## Run
+
+**First time only — bootstrap the TLS certificate** (see [TLS](#tls) for how it
+works). With DNS already pointing at this host:
+
+```bash
+./deploy/init-letsencrypt.sh
+```
+
+Then bring the full stack up:
 
 ```bash
 docker compose -p gfl-prod -f docker-compose.prod.yml --env-file .env.prod up -d --build
@@ -41,7 +55,8 @@ Startup order is enforced by Compose:
 1. `db` becomes healthy (`pg_isready`).
 2. `migrate` runs `prisma migrate deploy` and exits successfully.
 3. `app` starts only after the migrator completed (`service_completed_successfully`).
-4. `nginx` proxies port 80 → `app:3000`.
+4. `nginx` terminates HTTPS on 443 → `app:3000` and redirects port 80 → HTTPS.
+5. `certbot` renews the certificate in the background.
 
 Seed an initial admin + invite codes once the stack is up:
 
@@ -71,15 +86,45 @@ Notes:
 
 ## TLS
 
-`deploy/nginx.conf` terminates plain HTTP on port 80. For production, terminate
-HTTPS in front of the app and set `NEXTAUTH_URL` to the `https://` origin. Options:
+nginx terminates HTTPS on port 443 with a Let's Encrypt certificate, and
+redirects all plain HTTP (`:80`) to HTTPS. Certificates are obtained and renewed
+by a `certbot` companion container using the ACME **webroot** challenge — no
+manual annual step.
 
-- Add a `443` server block with certificates (e.g. Let's Encrypt via certbot) to
-  `deploy/nginx.conf` and publish port 443.
-- Or front the stack with a managed load balancer / Cloudflare and keep nginx on 80.
+**How it fits together:**
 
-nginx already forwards `X-Forwarded-Proto` / `X-Forwarded-Host` so NextAuth builds
-correct absolute callback URLs behind the proxy.
+- `deploy/nginx.conf.template` has two server blocks: `:80` serves
+  `/.well-known/acme-challenge/` (from the shared `certbot_www` volume) and 301s
+  everything else to HTTPS; `:443` terminates TLS (TLS 1.2/1.3, ECDHE ciphers),
+  sends `Strict-Transport-Security`, and proxies to `app:3000`. It's an nginx
+  *template* — the image runs `envsubst` at startup to fill in `${DOMAIN}`
+  (`NGINX_ENVSUBST_FILTER=DOMAIN` keeps nginx's own `$host`/`$scheme` vars intact).
+- The `certbot` service runs `certbot renew` every 12h; certbot only acts when
+  the cert is within 30 days of expiry. nginx reloads every 6h to pick up a
+  renewed cert. Certs live in the `certbot_certs` volume, shared read-only with
+  nginx.
+
+**First-time bootstrap** (`deploy/init-letsencrypt.sh`): nginx can't start
+without a cert, but the webroot challenge needs nginx running — so the script
+drops in a throwaway self-signed cert, starts nginx, then swaps in the real
+Let's Encrypt cert and reloads. Run it once per host/domain:
+
+```bash
+# set DOMAIN + CERTBOT_EMAIL in .env.prod first, and point DNS at this host
+./deploy/init-letsencrypt.sh
+# test against Let's Encrypt staging (untrusted cert, no rate limits):
+STAGING=1 ./deploy/init-letsencrypt.sh
+```
+
+Set `NEXTAUTH_URL=https://your-domain.com` — the `https://` origin makes NextAuth
+issue **Secure** cookies. nginx forwards `X-Forwarded-Proto` / `X-Forwarded-Host`
+so NextAuth builds correct absolute callback URLs behind the proxy.
+
+**Alternative — front with a managed LB / Cloudflare:** point it at this host and
+let it terminate TLS. Cloudflare "Full (strict)" works as-is against the real
+origin cert this stack already provisions. If your fronting layer terminates TLS
+itself and talks HTTP to the origin, ensure it forwards `X-Forwarded-Proto=https`
+and still set `NEXTAUTH_URL` to the `https://` origin.
 
 ## Managed platforms (Railway / Render)
 
@@ -106,12 +151,45 @@ docker compose -p gfl-prod -f docker-compose.prod.yml ps
 docker compose -p gfl-prod -f docker-compose.prod.yml logs -f app
 ```
 
-**Back up / restore the database** — state lives in the `gfl-prod_pgdata`
-volume; back it up on a schedule (nothing does this automatically yet):
+**Back up / restore the database** — the `backup` service runs `pg_dump`
+automatically. It reuses the `postgres:16-alpine` image (no extra dependency),
+writes a compressed, date-stamped custom-format dump (`gfl-YYYYmmdd-HHMMSS.dump`)
+into the `./backups` host directory on a schedule, and prunes to the newest
+`BACKUP_KEEP` dumps. `./backups` is a bind mount outside the `pgdata` volume, so
+dumps survive loss of that volume. Interval and retention are tunable in
+`.env.prod` (`BACKUP_INTERVAL`, default daily; `BACKUP_KEEP`, default 7); see
+`deploy/backup.sh`.
+
+For off-host durability (surviving loss of the whole host), sync `./backups` to
+object storage — e.g. a cron'd `rclone/aws s3 sync ./backups <remote>`.
+
+Check the latest dump and trigger one on demand:
 
 ```bash
+ls -lt backups/                                                   # newest first
+docker compose -p gfl-prod -f docker-compose.prod.yml restart backup   # run now
+```
+
+**Restore** from a dump with `pg_restore` (`--clean --if-exists` drops existing
+objects first, so it works into the live DB; restore into a scratch DB first if
+you want to verify without touching production):
+
+```bash
+# into the live database (app should be stopped: `... stop app`)
 docker compose -p gfl-prod -f docker-compose.prod.yml --env-file .env.prod \
-  exec db pg_dump -U gfl gfl > backup-$(date +%F).sql
+  exec -T db pg_restore -U gfl -d gfl --clean --if-exists < backups/gfl-YYYYmmdd-HHMMSS.dump
+```
+
+**Health / readiness** — the app exposes an unauthenticated `GET /api/health`
+that returns `200 {"ok":true}` when the server is up and the DB is reachable
+(`503` otherwise). The `app` service has a Docker `healthcheck` hitting it, and
+**nginx waits on `condition: service_healthy`** before starting — so a clean
+`up -d` / redeploy no longer serves 502s while Next.js is still booting. Check
+it directly with:
+
+```bash
+curl -fsS https://your-host/api/health   # {"ok":true}
+docker compose -p gfl-prod -f docker-compose.prod.yml ps   # app shows "healthy"
 ```
 
 **Stop / tear down:**
@@ -123,36 +201,56 @@ docker compose -p gfl-prod -f docker-compose.prod.yml down -v       # also delet
 
 ## Pick reminders (cron)
 
-Pick-deadline reminders are sent by an external scheduler hitting an
-authenticated endpoint — there is no in-app scheduler. Set `CRON_SECRET` in
-`.env.prod` (`openssl rand -hex 32`) and configure SMTP (see [Configure](#configure));
-without SMTP the reminders are logged to the app console instead of emailed.
+Pick-deadline reminders are sent by a scheduler hitting an authenticated
+endpoint — there is no in-app scheduler. The Compose stack ships a **`reminders`
+sidecar** (`deploy/reminders.sh`) that does this for you: it POSTs to the app's
+reminders endpoint every `REMINDER_INTERVAL` seconds (default 900 = 15 min).
 
-The endpoint is idempotent per (user, week, reminder slot), so it's safe to call
-often — poll it every ~15 minutes and it emails only when a slot's window is open
-(regular season: ~3h before Thursday night and the first Sunday game; playoffs:
-the morning of the week's first game) and only users who still haven't picked and
-haven't opted out:
+To enable it:
+
+1. Set `CRON_SECRET` in `.env.prod` (`openssl rand -hex 32`). The app and the
+   sidecar both read it; the sidecar sends it as `Authorization: Bearer`. Leave
+   it unset and the sidecar idles (logs a notice) and the endpoint returns 503 —
+   no reminders are sent, but the stack still comes up.
+2. Configure SMTP (see [Configure](#configure)). Without SMTP the reminders are
+   logged to the app console instead of emailed.
+
+That's it — `docker compose … up -d` starts the sidecar alongside the app. The
+call goes over the internal Compose network (`http://app:3000`), not through
+nginx/HTTPS, so `CRON_SECRET` never leaves the private network.
+
+The endpoint is idempotent per (user, week, reminder slot), so frequent polling
+is safe — it emails only when a slot's window is open (regular season: ~3h before
+Thursday night and the first Sunday game; playoffs: the morning of the week's
+first game) and only users who still haven't picked and haven't opted out. Lead
+time is tunable with `REMINDER_LEAD_HOURS` (default 3).
+
+**Watching it:** each poll logs to the sidecar's container log — the endpoint's
+JSON response on success, or `[reminders] send failed …` on a non-2xx/network
+error:
 
 ```bash
-curl -fsS -X POST https://your-host/api/admin/reminders/send \
-  -H "Authorization: Bearer $CRON_SECRET"
+docker compose -p gfl-prod -f docker-compose.prod.yml logs -f reminders
 ```
 
-Wire it to whatever scheduler the host provides — a crontab line, a Railway/Render
-cron job, or a GitHub Actions scheduled workflow. Example crontab (every 15 min):
+**Using a different scheduler instead** (host crontab, Railway/Render cron, a
+GitHub Actions `schedule:` workflow): drop the sidecar and POST the public
+endpoint yourself — the secret lives in that scheduler's secret store. Example
+crontab (every 15 min):
 
 ```cron
 */15 * * * * curl -fsS -X POST https://your-host/api/admin/reminders/send -H "Authorization: Bearer $CRON_SECRET" >/dev/null
 ```
 
-Lead time is tunable with `REMINDER_LEAD_HOURS` (default 3).
+A transient SMTP failure is not lost: the send is recorded per (user, week, slot)
+and a failed one is retried on the next poll (so a flaky mail server self-heals on
+the following run), while successful sends are never repeated. Failures are also
+logged (`[reminders] send failed …`) if you want to alert on them. The JSON
+response breaks each slot down into `sent` / `skipped` / `failed` counts.
 
 ### Known gaps (tracked separately)
 
-- **No TLS yet** — nginx serves plain HTTP on port 80 (see [TLS](#tls)). (#40)
-- **nginx starts before the app is ready** — `depends_on` waits for the app
-  container to start, not for it to accept requests; there is no app healthcheck
-  yet, so the first requests after a deploy can 502 briefly. (#41)
-- **The Dockerfile isn't built in CI**, so it can silently break between deploys. (#42)
-- **No automated DB backups** — the `pg_dump` above is manual. (#43)
+- **nginx reloads on a 6h timer, not on renewal** — a renewed cert can be up to
+  ~6h stale in nginx; switch to a certbot `--deploy-hook`. (#80)
+- **TLS cert covers only the single `DOMAIN`** — no apex+`www` SAN or canonical
+  redirect. (#81)

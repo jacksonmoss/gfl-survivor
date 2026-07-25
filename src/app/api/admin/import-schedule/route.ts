@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getESPNWeekParams, buildESPNUrl } from "@/lib/espn";
 import type { ESPNResponse } from "@/lib/espn";
 import { extractImportableGames } from "@/lib/score-sync";
+import { refreshOddsForGames } from "@/lib/odds-sync";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -81,5 +82,13 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ imported, skipped, total: data.events.length });
+  // Prime betting spreads for the imported games (no-op without ODDS_API_KEY,
+  // or if the shared 6h gate hasn't elapsed since the last odds fetch).
+  const weekGames = await prisma.game.findMany({
+    where: { weekId: week.id },
+    select: { id: true, homeTeam: true, awayTeam: true, status: true, kickoff: true },
+  });
+  const spreads = await refreshOddsForGames(weekGames);
+
+  return NextResponse.json({ imported, skipped, total: data.events.length, spreads });
 }

@@ -31,6 +31,12 @@ enum ReminderSlot {
   PLAYOFF
 }
 
+enum ReminderStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
 
 model User {
   id             String               @id @default(cuid())
@@ -113,6 +119,10 @@ model Game {
   // Cached Open-Meteo forecast for outdoor games; null for domes / not-yet-fetched.
   // Shape: GameWeather in src/lib/weather.ts ({ temp_f, wind_mph, wind_dir, precip_chance, code, fetched_at }).
   weatherJson Json?
+  // Cached consensus point spread for the home team (negative = home favored,
+  // positive = home underdog); away spread is the inverse. Null when odds aren't
+  // available (preseason, international) or ODDS_API_KEY is unset. See src/lib/odds.ts.
+  spreadHome Float?
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
 }
@@ -143,13 +153,14 @@ model Team {
 // One row per (user, week, reminder slot) — the idempotency ledger that keeps
 // re-running the send job from double-emailing. See src/lib/reminders.ts.
 model ReminderLog {
-  id     String       @id @default(cuid())
+  id     String         @id @default(cuid())
   userId String
-  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   weekId String
-  week   Week         @relation(fields: [weekId], references: [id], onDelete: Cascade)
+  week   Week           @relation(fields: [weekId], references: [id], onDelete: Cascade)
   slot   ReminderSlot
-  sentAt DateTime     @default(now())
+  status ReminderStatus @default(PENDING)
+  sentAt DateTime       @default(now())
 
   @@unique([userId, weekId, slot])
   @@index([weekId])

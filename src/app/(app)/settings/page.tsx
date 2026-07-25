@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useToast } from "@/components/toast";
 
 export default function SettingsPage() {
   const [displayName, setDisplayName] = useState("");
@@ -10,9 +11,8 @@ export default function SettingsPage() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [profileMsg, setProfileMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
-  const [pwMsg, setPwMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     fetch("/api/settings")
@@ -29,25 +29,24 @@ export default function SettingsPage() {
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    setProfileMsg(null);
     const res = await fetch("/api/settings", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ displayName, realName, email, emailReminders }),
     });
     const data = await res.json();
-    setProfileMsg(res.ok ? { type: "ok", text: "Saved" } : { type: "err", text: data.error });
+    if (res.ok) toast.success("Saved");
+    else toast.error(data.error);
     setLoading(false);
   }
 
   async function changePassword(e: React.FormEvent) {
     e.preventDefault();
     if (newPassword !== confirmPassword) {
-      setPwMsg({ type: "err", text: "Passwords do not match" });
+      toast.error("Passwords do not match");
       return;
     }
     setLoading(true);
-    setPwMsg(null);
     const res = await fetch("/api/settings", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -55,12 +54,12 @@ export default function SettingsPage() {
     });
     const data = await res.json();
     if (res.ok) {
-      setPwMsg({ type: "ok", text: "Password updated" });
+      toast.success("Password updated");
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
     } else {
-      setPwMsg({ type: "err", text: data.error });
+      toast.error(data.error);
     }
     setLoading(false);
   }
@@ -114,7 +113,6 @@ export default function SettingsPage() {
               </span>
             </span>
           </label>
-          {profileMsg && <Feedback msg={profileMsg} />}
           <button type="submit" disabled={loading} className={btn}>
             Save Profile
           </button>
@@ -154,7 +152,6 @@ export default function SettingsPage() {
               className={input}
             />
           </Field>
-          {pwMsg && <Feedback msg={pwMsg} />}
           <button type="submit" disabled={loading} className={btn}>
             Update Password
           </button>
@@ -174,13 +171,5 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   );
 }
 
-function Feedback({ msg }: { msg: { type: "ok" | "err"; text: string } }) {
-  return (
-    <p className={`text-sm ${msg.type === "ok" ? "text-green-400" : "text-red-400"}`}>
-      {msg.text}
-    </p>
-  );
-}
-
-const input = "w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors";
+const input ="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors";
 const btn = "rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 active:scale-95 disabled:opacity-50 transition-all";

@@ -73,6 +73,40 @@ export function rateLimit(
   return { limited: false, remaining: max - bucket.count, retryAfterSeconds: 0 };
 }
 
+// Read-only check: reports whether `key` is currently over its limit without
+// consuming any budget. Used by the login flow (issue #46), where `authorize`
+// (src/lib/auth.ts) counts *failed* attempts only — so it peeks to reject a
+// locked-out caller before doing any DB/bcrypt work, without a peek itself
+// counting as an attempt.
+export function peekRateLimit(
+  key: string,
+  { max }: RateLimitConfig,
+  now: number = Date.now()
+): RateLimitResult {
+  const bucket = buckets.get(key);
+
+  if (!bucket || now >= bucket.resetAt) {
+    return { limited: false, remaining: max, retryAfterSeconds: 0 };
+  }
+
+  if (bucket.count >= max) {
+    return {
+      limited: true,
+      remaining: 0,
+      retryAfterSeconds: Math.ceil((bucket.resetAt - now) / 1000),
+    };
+  }
+
+  return { limited: false, remaining: max - bucket.count, retryAfterSeconds: 0 };
+}
+
+// Clears a key's window. Called on a successful login so a user who fat-fingers
+// their password a few times isn't left one mistake from a lockout, and so a
+// legitimate login from a shared/NAT'd IP drains attempts accrued by others.
+export function resetRateLimit(key: string) {
+  buckets.delete(key);
+}
+
 // Test helper — clears all state between test cases.
 export function __resetRateLimiter() {
   buckets.clear();
