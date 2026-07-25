@@ -5,7 +5,7 @@ test.describe("Leaderboard", () => {
   test("shows players tab by default", async ({ page }) => {
     await loginAs(page, PLAYER1.username, PLAYER1.password);
     await page.goto("/leaderboard");
-    await expect(page.getByRole("button", { name: "Players" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Players" })).toBeVisible();
     await expect(page.locator("td").filter({ hasText: "Player One" })).toBeVisible();
   });
 
@@ -23,7 +23,7 @@ test.describe("Leaderboard", () => {
     // Wait for data to load before toggling picks
     await expect(page.locator("td").filter({ hasText: "Player One" })).toBeVisible();
     await page.getByRole("button", { name: "Show Picks" }).click();
-    await expect(page.getByRole("cell", { name: "KC ✓", exact: true })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "KC Win", exact: true })).toBeVisible();
   });
 
   test("Show Picks toggle persists across navigation", async ({ page }) => {
@@ -36,13 +36,13 @@ test.describe("Leaderboard", () => {
     await page.goto("/picks");
     await page.goto("/leaderboard");
     await expect(page.getByRole("button", { name: "Hide Picks" })).toBeVisible();
-    await expect(page.getByRole("cell", { name: "KC ✓", exact: true })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "KC Win", exact: true })).toBeVisible();
   });
 
   test("admin sees Team Trophy tab", async ({ page }) => {
     await loginAs(page, ADMIN.username, ADMIN.password);
     await page.goto("/leaderboard");
-    await expect(page.getByRole("button", { name: "Team Trophy" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Team Trophy" })).toBeVisible();
   });
 
   test("season selector is present and shows current season", async ({ page }) => {

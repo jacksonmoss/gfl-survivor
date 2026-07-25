@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useState, useSyncExternalStore } from "react";
+import { focusRing } from "@/lib/ui";
 
 const SHOW_PICKS_KEY = "leaderboard:showPicks";
 
@@ -103,9 +104,10 @@ export default function LeaderboardPage() {
         <div className="flex items-center gap-2">
           {seasons.length > 0 && (
             <select
+              aria-label="Select season"
               value={seasonId}
               onChange={(e) => onSeasonChange(e.target.value)}
-              className="rounded-lg border border-white/10 bg-gray-900 px-3 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none"
+              className={`rounded-lg border border-white/10 bg-gray-900 px-3 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none ${focusRing}`}
             >
               {seasons.map((s) => (
                 <option key={s.id} value={s.id}>{s.year}{s.isActive ? " (current)" : ""}</option>
@@ -117,12 +119,25 @@ export default function LeaderboardPage() {
 
       {/* Tab bar + picks toggle */}
       <div className="flex items-center justify-between border-b border-white/10">
-        <div className="flex gap-1">
+        <div role="tablist" aria-label="Leaderboard view" className="flex gap-1">
           {(["players", "teams"] as const).map((t) => (
             <button
               key={t}
+              role="tab"
+              id={`tab-${t}`}
+              aria-selected={tab === t}
+              aria-controls={`panel-${t}`}
+              tabIndex={tab === t ? 0 : -1}
               onClick={() => setTab(t)}
-              className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors -mb-px border-b-2 capitalize ${
+              onKeyDown={(e) => {
+                if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+                  e.preventDefault();
+                  const next = t === "players" ? "teams" : "players";
+                  setTab(next);
+                  document.getElementById(`tab-${next}`)?.focus();
+                }
+              }}
+              className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors -mb-px border-b-2 capitalize ${focusRing} ${
                 tab === t ? "border-blue-500 text-white" : "border-transparent text-gray-500 hover:text-gray-300"
               }`}
             >
@@ -133,7 +148,8 @@ export default function LeaderboardPage() {
         {tab === "players" && (
           <button
             onClick={() => setShowPicks(!showPicks)}
-            className={`text-xs px-3 py-1.5 rounded-lg border transition-all mb-1 ${
+            aria-pressed={showPicks}
+            className={`text-xs px-3 py-1.5 rounded-lg border transition-all mb-1 ${focusRing} ${
               showPicks
                 ? "border-blue-500 bg-blue-900/30 text-blue-300"
                 : "border-white/10 text-gray-500 hover:text-gray-300"
@@ -148,7 +164,7 @@ export default function LeaderboardPage() {
 
       {/* Players tab */}
       {!loading && tab === "players" && (
-        <div className="rounded-xl border border-white/10 overflow-hidden">
+        <div role="tabpanel" id="panel-players" aria-labelledby="tab-players" className="rounded-xl border border-white/10 overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-white/10 bg-white/5">
@@ -164,11 +180,22 @@ export default function LeaderboardPage() {
               {players.length === 0 && (
                 <tr><td colSpan={6} className="px-4 py-10 text-center text-gray-600">No players yet</td></tr>
               )}
-              {players.map((player, i) => (
+              {players.map((player, i) => {
+                const expanded = showPicks || expandedPlayer === player.id;
+                const hasPicks = player.picks.length > 0;
+                const toggle = () => setExpandedPlayer(expandedPlayer === player.id ? null : player.id);
+                return (
                 <Fragment key={player.id}>
                   <tr
-                    onClick={() => setExpandedPlayer(expandedPlayer === player.id ? null : player.id)}
-                    className="hover:bg-white/5 transition-colors cursor-pointer"
+                    onClick={toggle}
+                    onKeyDown={hasPicks ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
+                    } : undefined}
+                    role={hasPicks ? "button" : undefined}
+                    tabIndex={hasPicks ? 0 : undefined}
+                    aria-expanded={hasPicks ? expanded : undefined}
+                    aria-controls={hasPicks && expanded ? `picks-${player.id}` : undefined}
+                    className={`hover:bg-white/5 transition-colors cursor-pointer ${focusRing}`}
                   >
                     <td className="px-4 py-3 text-gray-600">{i + 1}</td>
                     <td className="px-4 py-3">
@@ -183,8 +210,8 @@ export default function LeaderboardPage() {
                     <td className="px-4 py-3 text-right font-semibold">{player.points}</td>
                   </tr>
                   {/* Picks row — shown via global toggle OR individual expand */}
-                  {(showPicks || expandedPlayer === player.id) && player.picks.length > 0 && (
-                    <tr key={`${player.id}-picks`} className="bg-black/20">
+                  {expanded && hasPicks && (
+                    <tr key={`${player.id}-picks`} id={`picks-${player.id}`} className="bg-black/20">
                       <td colSpan={6} className="px-4 py-3">
                         <div className="overflow-x-auto">
                           <table className="text-xs whitespace-nowrap">
@@ -199,15 +226,20 @@ export default function LeaderboardPage() {
                             </thead>
                             <tbody>
                               <tr>
-                                {player.picks.sort((a, b) => a.week - b.week).map((pick) => (
+                                {player.picks.sort((a, b) => a.week - b.week).map((pick) => {
+                                  const glyph = pick.result === "WIN" ? "✓" : pick.result === "LOSS" ? "✗" : "–";
+                                  const word = pick.result === "WIN" ? "Win" : pick.result === "LOSS" ? "Loss" : "Pending";
+                                  return (
                                   <td key={pick.week} className={`pr-5 ${
                                     pick.result === "WIN" ? "text-green-400" :
                                     pick.result === "LOSS" ? "text-red-400" :
                                     "text-gray-500"
                                   }`}>
-                                    {pick.team} {pick.result === "WIN" ? "✓" : pick.result === "LOSS" ? "✗" : "–"}
+                                    {pick.team} <span aria-hidden="true">{glyph}</span>
+                                    <span className="sr-only">{word}</span>
                                   </td>
-                                ))}
+                                  );
+                                })}
                               </tr>
                             </tbody>
                           </table>
@@ -216,7 +248,8 @@ export default function LeaderboardPage() {
                     </tr>
                   )}
                 </Fragment>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -224,7 +257,7 @@ export default function LeaderboardPage() {
 
       {/* Teams tab */}
       {!loading && tab === "teams" && (
-        <div className="space-y-3">
+        <div role="tabpanel" id="panel-teams" aria-labelledby="tab-teams" className="space-y-3">
           {teams.length === 0 && <p className="text-center py-10 text-gray-600 text-sm">No teams yet</p>}
           {teams.map((team, i) => (
             <div key={team.name} className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-3">
