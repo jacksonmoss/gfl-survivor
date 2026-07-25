@@ -21,6 +21,17 @@ test.describe("Mobile — golden paths", () => {
     await expect(page.getByRole("link", { name: "Leaderboard" })).toBeVisible();
   });
 
+  test("sign out from the mobile menu returns to /login on the same origin", async ({ page }) => {
+    await loginAs(page, PLAYER1.username, PLAYER1.password);
+    const origin = new URL(page.url()).origin;
+    await page.locator('button[class*="sm:hidden"]').click();
+    await page.getByRole("button", { name: "Sign out" }).click();
+    await expect(page).toHaveURL(/\/login/);
+    // Regression guard for #78: logout must stay on the loaded origin, not
+    // redirect to localhost via NEXTAUTH_URL.
+    expect(new URL(page.url()).origin).toBe(origin);
+  });
+
   test("picks page renders on mobile", async ({ page }) => {
     await loginAs(page, PLAYER1.username, PLAYER1.password);
     // Match any year (the active season may have changed due to admin tests)
