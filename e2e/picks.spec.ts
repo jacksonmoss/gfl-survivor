@@ -33,9 +33,9 @@ test.describe("Picks", () => {
     // don't also match the picked team button's "✓ Your pick" badge (the
     // optimistic update renders both immediately).
     await expect(page.getByText("Your pick", { exact: true })).toBeVisible();
-    // Week 2 in the selector should now show a pending bullet
+    // Week 2 in the selector should now show a "Picked" badge
     const weekOption = page.locator("select option").filter({ hasText: "Week 2" });
-    await expect(weekOption).toContainText("•");
+    await expect(weekOption).toContainText("Picked");
   });
 
   test("can change a pick to another future game", async ({ page }) => {

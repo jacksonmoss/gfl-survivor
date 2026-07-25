@@ -7,6 +7,7 @@ import { isIndoorStadium } from "@/lib/stadiums";
 import { formatWeather, weatherIcon } from "@/lib/weather";
 import type { GameWeather } from "@/lib/weather";
 import { formatSpread } from "@/lib/odds";
+import { focusRing, focusRingInset } from "@/lib/ui";
 import { useToast } from "@/components/toast";
 
 interface Game {
@@ -54,6 +55,14 @@ function resultColor(result: string) {
   if (result === "WIN") return "text-green-400";
   if (result === "LOSS") return "text-red-400";
   return "text-gray-500";
+}
+
+// Word form of a pick result, so status is never conveyed by color/glyph alone
+// (used in the week <select> options, which can't hold sr-only markup).
+function resultWord(result: string) {
+  if (result === "WIN") return "Won";
+  if (result === "LOSS") return "Lost";
+  return "Picked";
 }
 
 export default function PicksPage() {
@@ -188,23 +197,36 @@ export default function PicksPage() {
       </div>
 
       <select
+        aria-label="Select week"
         value={selectedWeek?.id ?? ""}
         onChange={(e) => {
           const w = season.weeks.find((w) => w.id === e.target.value);
           if (w) { setSelectedWeek(w); weekRef.current = w.id; }
         }}
-        className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+        className={`w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none ${focusRing}`}
       >
         {season.weeks.map((week) => {
           const p = picks.find((p) => p.weekId === week.id);
           const label = week.isPlayoff ? `${week.label} (${week.pointValue}pt)` : `Week ${week.weekNumber}`;
-          const badge = p ? (p.result === "WIN" ? " ✓" : p.result === "LOSS" ? " ✗" : " •") : "";
+          const badge = p ? ` — ${resultWord(p.result)}` : "";
           return <option key={week.id} value={week.id}>{label}{badge}</option>;
         })}
       </select>
 
       {selectedWeek && (
         <>
+          {/* Screen-reader announcement for live/final score changes. The string
+              only changes when a score or status changes, so polling that returns
+              no change stays silent. */}
+          <div className="sr-only" role="status" aria-live="polite">
+            {selectedWeek.games
+              .filter((g) => g.status === "LIVE" || g.status === "FINAL")
+              .map((g) =>
+                `${getTeamName(g.awayTeam)} ${g.awayScore ?? 0}, ${getTeamName(g.homeTeam)} ${g.homeScore ?? 0}, ${g.status === "LIVE" ? "in progress" : "final"}.`
+              )
+              .join(" ")}
+          </div>
+
           {/* Current pick summary */}
           {currentPick && (
             <div key={currentPick.team} className={`animate-pop rounded-xl border px-4 py-3 flex items-center justify-between ${
@@ -314,13 +336,15 @@ export default function PicksPage() {
           <div className="space-y-2">
             <button
               onClick={() => setShowHistory((v) => !v)}
-              className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-300 transition-colors uppercase tracking-wider"
+              aria-expanded={showHistory}
+              aria-controls="season-picks-panel"
+              className={`flex items-center gap-1.5 rounded text-xs font-medium text-gray-500 hover:text-gray-300 transition-colors uppercase tracking-wider ${focusRing}`}
             >
-              <span className={`transition-transform ${showHistory ? "rotate-90" : ""}`}>▶</span>
+              <span aria-hidden="true" className={`transition-transform ${showHistory ? "rotate-90" : ""}`}>▶</span>
               Season picks
             </button>
             {showHistory && (
-              <div className="rounded-xl border border-white/10 overflow-hidden">
+              <div id="season-picks-panel" className="rounded-xl border border-white/10 overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-white/10 bg-white/5">
@@ -396,11 +420,17 @@ function TeamSide({
   disabled: boolean;
   onPick: () => void;
 }) {
+  // Keep the abbreviation in the accessible name (the E2E suite selects team
+  // buttons by abbr), then append the full name and pick/used state so a screen
+  // reader announces which team and its status rather than a bare glyph.
+  const state = isPicked ? ", your pick" : isUsed ? ", already used this season" : "";
   return (
     <button
       disabled={disabled}
       onClick={onPick}
-      className={`flex-1 px-3 py-4 text-center transition-all active:scale-95 ${
+      aria-pressed={isPicked}
+      aria-label={`${abbr} ${getTeamName(abbr)}${state}`}
+      className={`flex-1 px-3 py-4 text-center transition-all active:scale-95 ${focusRingInset} ${
         isPicked
           ? "bg-blue-900/40 text-white"
           : disabled
