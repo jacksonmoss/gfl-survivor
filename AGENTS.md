@@ -238,7 +238,7 @@ Team ── User[] (members, for team trophy standings)
 - [ ] **Tie handling** — score sync currently picks the home team as winner on ties. NFL regular season games can't tie (overtime rules), but worth verifying edge cases.
 - [ ] **CI security scanning** — #26: add dependency vulnerability scanning (osv-scanner/npm audit) and consider CodeQL/secret scanning to `.github/workflows/ci.yml`, alongside the existing lint/test/build job.
 - [ ] **Weather follow-ups** (split from #16): #101 refresh weather **and** spreads via cron (not just on picks-page load) — combines the former #67/#74. (#69 E2E coverage + seed fixture for the weather/dome strip: done.)
-- [ ] **Betting-spread follow-ups** (split from #17): #72 E2E + seed coverage for the spread strip, #73 make the odds refresh gate multi-instance safe, #101 populate spreads via cron (combined with weather, was #74).
+- [ ] **Betting-spread follow-ups** (split from #17): #73 make the odds refresh gate multi-instance safe, #101 populate spreads via cron (combined with weather, was #74). (#72 E2E + seed coverage for the spread strip: done.)
 
 ## Testing
 
@@ -268,7 +268,7 @@ e2e/
 ├── global-setup.ts     # drops/recreates a throwaway `gfl_e2e` DB, runs migrate deploy + seed-e2e
 ├── helpers.ts          # ADMIN/PLAYER1 creds, loginAs(page, ...)
 ├── auth.spec.ts        # login/register/logout
-├── picks.spec.ts       # pick submit/change/lock + weather/dome strip (#69)
+├── picks.spec.ts       # pick submit/change/lock + weather/dome strip (#69) + betting-spread strip (#72)
 ├── leaderboard.spec.ts # standings + team trophy
 ├── z-admin.spec.ts     # admin panel: invites, season create, team create + rename
 ├── password-reset.spec.ts
