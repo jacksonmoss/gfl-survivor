@@ -88,3 +88,34 @@ test.describe("Weather / dome strip", () => {
     await expect(sf).not.toContainText("Dome");
   });
 });
+
+// Betting-spread strip on the matchup cards (#72). Fixtures are seeded in
+// prisma/seed-e2e.ts: GB vs CHI carries spreadHome = -6.5 (GB favored), so the
+// home side renders "-6.5" and the away side "+6.5"; SF vs DAL has no spread, so
+// its card renders no strip. Spreads come straight from the seeded
+// Game.spreadHome — no live Odds API call.
+test.describe("Betting-spread strip", () => {
+  test.beforeEach(async ({ page }) => {
+    await loginAs(page, PLAYER1.username, PLAYER1.password);
+  });
+
+  const cardFor = (page: import("@playwright/test").Page, abbr: string) =>
+    page.locator("div.overflow-hidden.rounded-xl").filter({
+      has: page.getByRole("button", { name: new RegExp(`^${abbr}\\b`) }),
+    });
+
+  test("game with a seeded spread shows favorite and underdog lines", async ({ page }) => {
+    const card = cardFor(page, "GB");
+    // Each side renders its spread in a div[title="Vegas spread"]: GB -6.5, CHI +6.5.
+    const spreads = card.locator('[title="Vegas spread"]');
+    await expect(spreads).toHaveCount(2);
+    await expect(card).toContainText("-6.5");
+    await expect(card).toContainText("+6.5");
+  });
+
+  test("game without a spread shows no spread line", async ({ page }) => {
+    const card = cardFor(page, "SF");
+    await expect(card).toBeVisible();
+    await expect(card.locator('[title="Vegas spread"]')).toHaveCount(0);
+  });
+});

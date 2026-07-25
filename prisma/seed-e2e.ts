@@ -151,6 +151,11 @@ async function main() {
   // dependency. fetched_at = now keeps the mount sync's ~3h cache gate from
   // re-fetching and overwriting it. (LAR vs SEA above is the dome fixture: SoFi
   // is indoor, so that card shows "🏟️ Dome" with no seeded weather.)
+  //
+  // Also carries a seeded spreadHome (GB favored by 6.5) so the betting-spread
+  // strip is asserted deterministically without any Odds API call (#72): the
+  // home side shows "-6.5", the away side "+6.5". SF vs DAL above is left with
+  // spreadHome null as the graceful-absent fixture (no strip).
   await prisma.game.upsert({
     where: { externalId: "e2e-game-w2-3" },
     update: {},
@@ -161,6 +166,7 @@ async function main() {
       status: "SCHEDULED",
       kickoff: twoDaysFromNow,
       externalId: "e2e-game-w2-3",
+      spreadHome: -6.5,
       weatherJson: {
         temp_f: 41,
         wind_mph: 22,
