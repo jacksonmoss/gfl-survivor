@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { buildSeasonWeeks } from "@/lib/season";
 
 async function requireAdmin() {
   const session = await getServerSession(authOptions);
@@ -42,21 +43,7 @@ export async function POST(req: NextRequest) {
       year,
       isActive: true,
       weeks: {
-        create: [
-          // Regular season weeks 1-18
-          ...Array.from({ length: 18 }, (_, i) => ({
-            weekNumber: i + 1,
-            label: `Week ${i + 1}`,
-            isPlayoff: false,
-            pointValue: 1,
-            pickDeadline: new Date(`${year}-09-01`), // placeholder, admin updates
-          })),
-          // Playoff rounds
-          { weekNumber: 19, label: "Wild Card", isPlayoff: true, pointValue: 2, pickDeadline: new Date(`${year + 1}-01-01`) },
-          { weekNumber: 20, label: "Divisional", isPlayoff: true, pointValue: 3, pickDeadline: new Date(`${year + 1}-01-01`) },
-          { weekNumber: 21, label: "Conference Championship", isPlayoff: true, pointValue: 4, pickDeadline: new Date(`${year + 1}-01-01`) },
-          { weekNumber: 22, label: "Super Bowl", isPlayoff: true, pointValue: 5, pickDeadline: new Date(`${year + 1}-02-01`) },
-        ],
+        create: buildSeasonWeeks(year),
       },
     },
     include: { weeks: true },
