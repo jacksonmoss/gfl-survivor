@@ -18,7 +18,8 @@
     "seed": "tsx prisma/seed.ts",
     "seed:demo": "tsx prisma/seed-demo.ts",
     "test:e2e": "playwright test",
-    "seed:e2e": "tsx prisma/seed-e2e.ts"
+    "seed:e2e": "tsx prisma/seed-e2e.ts",
+    "sim:season": "tsx prisma/sim-season.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",
