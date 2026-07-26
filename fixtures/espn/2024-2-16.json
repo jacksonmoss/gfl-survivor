@@ -1,0 +1,596 @@
+{
+  "events": [
+    {
+      "id": "401671749",
+      "competitions": [
+        {
+          "id": "401671749",
+          "date": "2024-12-20T01:15Z",
+          "status": {
+            "type": {
+              "id": "3",
+              "name": "STATUS_FINAL",
+              "state": "post",
+              "completed": true
+            }
+          },
+          "competitors": [
+            {
+              "homeAway": "home",
+              "team": {
+                "abbreviation": "LAC",
+                "displayName": "Los Angeles Chargers"
+              },
+              "score": "34",
+              "winner": true
+            },
+            {
+              "homeAway": "away",
+              "team": {
+                "abbreviation": "DEN",
+                "displayName": "Denver Broncos"
+              },
+              "score": "27",
+              "winner": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401671780",
+      "competitions": [
+        {
+          "id": "401671780",
+          "date": "2024-12-21T18:00Z",
+          "status": {
+            "type": {
+              "id": "3",
+              "name": "STATUS_FINAL",
+              "state": "post",
+              "completed": true
+            }
+          },
+          "competitors": [
+            {
+              "homeAway": "home",
+              "team": {
+                "abbreviation": "KC",
+                "displayName": "Kansas City Chiefs"
+              },
+              "score": "27",
+              "winner": true
+            },
+            {
+              "homeAway": "away",
+              "team": {
+                "abbreviation": "HOU",
+                "displayName": "Houston Texans"
+              },
+              "score": "19",
+              "winner": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401671778",
+      "competitions": [
+        {
+          "id": "401671778",
+          "date": "2024-12-21T21:30Z",
+          "status": {
+            "type": {
+              "id": "3",
+              "name": "STATUS_FINAL",
+              "state": "post",
+              "completed": true
+            }
+          },
+          "competitors": [
+            {
+              "homeAway": "home",
+              "team": {
+                "abbreviation": "BAL",
+                "displayName": "Baltimore Ravens"
+              },
+              "score": "34",
+              "winner": true
+            },
+            {
+              "homeAway": "away",
+              "team": {
+                "abbreviation": "PIT",
+                "displayName": "Pittsburgh Steelers"
+              },
+              "score": "17",
+              "winner": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401671729",
+      "competitions": [
+        {
+          "id": "401671729",
+          "date": "2024-12-22T18:00Z",
+          "status": {
+            "type": {
+              "id": "3",
+              "name": "STATUS_FINAL",
+              "state": "post",
+              "completed": true
+            }
+          },
+          "competitors": [
+            {
+              "homeAway": "home",
+              "team": {
+                "abbreviation": "ATL",
+                "displayName": "Atlanta Falcons"
+              },
+              "score": "34",
+              "winner": true
+            },
+            {
+              "homeAway": "away",
+              "team": {
+                "abbreviation": "NYG",
+                "displayName": "New York Giants"
+              },
+              "score": "7",
+              "winner": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401671868",
+      "competitions": [
+        {
+          "id": "401671868",
+          "date": "2024-12-22T18:00Z",
+          "status": {
+            "type": {
+              "id": "3",
+              "name": "STATUS_FINAL",
+              "state": "post",
+              "completed": true
+            }
+          },
+          "competitors": [
+            {
+              "homeAway": "home",
+              "team": {
+                "abbreviation": "CHI",
+                "displayName": "Chicago Bears"
+              },
+              "score": "17",
+              "winner": false
+            },
+            {
+              "homeAway": "away",
+              "team": {
+                "abbreviation": "DET",
+                "displayName": "Detroit Lions"
+              },
+              "score": "34",
+              "winner": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401671811",
+      "competitions": [
+        {
+          "id": "401671811",
+          "date": "2024-12-22T18:00Z",
+          "status": {
+            "type": {
+              "id": "3",
+              "name": "STATUS_FINAL",
+              "state": "post",
+              "completed": true
+            }
+          },
+          "competitors": [
+            {
+              "homeAway": "home",
+              "team": {
+                "abbreviation": "CIN",
+                "displayName": "Cincinnati Bengals"
+              },
+              "score": "24",
+              "winner": true
+            },
+            {
+              "homeAway": "away",
+              "team": {
+                "abbreviation": "CLE",
+                "displayName": "Cleveland Browns"
+              },
+              "score": "6",
+              "winner": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401671862",
+      "competitions": [
+        {
+          "id": "401671862",
+          "date": "2024-12-22T18:00Z",
+          "status": {
+            "type": {
+              "id": "3",
+              "name": "STATUS_FINAL",
+              "state": "post",
+              "completed": true
+            }
+          },
+          "competitors": [
+            {
+              "homeAway": "home",
+              "team": {
+                "abbreviation": "IND",
+                "displayName": "Indianapolis Colts"
+              },
+              "score": "38",
+              "winner": true
+            },
+            {
+              "homeAway": "away",
+              "team": {
+                "abbreviation": "TEN",
+                "displayName": "Tennessee Titans"
+              },
+              "score": "30",
+              "winner": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401671621",
+      "competitions": [
+        {
+          "id": "401671621",
+          "date": "2024-12-22T18:00Z",
+          "status": {
+            "type": {
+              "id": "3",
+              "name": "STATUS_FINAL",
+              "state": "post",
+              "completed": true
+            }
+          },
+          "competitors": [
+            {
+              "homeAway": "home",
+              "team": {
+                "abbreviation": "NYJ",
+                "displayName": "New York Jets"
+              },
+              "score": "9",
+              "winner": false
+            },
+            {
+              "homeAway": "away",
+              "team": {
+                "abbreviation": "LAR",
+                "displayName": "Los Angeles Rams"
+              },
+              "score": "19",
+              "winner": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401671717",
+      "competitions": [
+        {
+          "id": "401671717",
+          "date": "2024-12-22T18:00Z",
+          "status": {
+            "type": {
+              "id": "3",
+              "name": "STATUS_FINAL",
+              "state": "post",
+              "completed": true
+            }
+          },
+          "competitors": [
+            {
+              "homeAway": "home",
+              "team": {
+                "abbreviation": "WSH",
+                "displayName": "Washington Commanders"
+              },
+              "score": "36",
+              "winner": true
+            },
+            {
+              "homeAway": "away",
+              "team": {
+                "abbreviation": "PHI",
+                "displayName": "Philadelphia Eagles"
+              },
+              "score": "33",
+              "winner": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401671732",
+      "competitions": [
+        {
+          "id": "401671732",
+          "date": "2024-12-22T18:00Z",
+          "status": {
+            "type": {
+              "id": "3",
+              "name": "STATUS_FINAL",
+              "state": "post",
+              "completed": true
+            }
+          },
+          "competitors": [
+            {
+              "homeAway": "home",
+              "team": {
+                "abbreviation": "CAR",
+                "displayName": "Carolina Panthers"
+              },
+              "score": "36",
+              "winner": true
+            },
+            {
+              "homeAway": "away",
+              "team": {
+                "abbreviation": "ARI",
+                "displayName": "Arizona Cardinals"
+              },
+              "score": "30",
+              "winner": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401671759",
+      "competitions": [
+        {
+          "id": "401671759",
+          "date": "2024-12-22T21:05Z",
+          "status": {
+            "type": {
+              "id": "3",
+              "name": "STATUS_FINAL",
+              "state": "post",
+              "completed": true
+            }
+          },
+          "competitors": [
+            {
+              "homeAway": "home",
+              "team": {
+                "abbreviation": "SEA",
+                "displayName": "Seattle Seahawks"
+              },
+              "score": "24",
+              "winner": false
+            },
+            {
+              "homeAway": "away",
+              "team": {
+                "abbreviation": "MIN",
+                "displayName": "Minnesota Vikings"
+              },
+              "score": "27",
+              "winner": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401671494",
+      "competitions": [
+        {
+          "id": "401671494",
+          "date": "2024-12-22T21:25Z",
+          "status": {
+            "type": {
+              "id": "3",
+              "name": "STATUS_FINAL",
+              "state": "post",
+              "completed": true
+            }
+          },
+          "competitors": [
+            {
+              "homeAway": "home",
+              "team": {
+                "abbreviation": "BUF",
+                "displayName": "Buffalo Bills"
+              },
+              "score": "24",
+              "winner": true
+            },
+            {
+              "homeAway": "away",
+              "team": {
+                "abbreviation": "NE",
+                "displayName": "New England Patriots"
+              },
+              "score": "21",
+              "winner": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401671673",
+      "competitions": [
+        {
+          "id": "401671673",
+          "date": "2024-12-22T21:25Z",
+          "status": {
+            "type": {
+              "id": "3",
+              "name": "STATUS_FINAL",
+              "state": "post",
+              "completed": true
+            }
+          },
+          "competitors": [
+            {
+              "homeAway": "home",
+              "team": {
+                "abbreviation": "LV",
+                "displayName": "Las Vegas Raiders"
+              },
+              "score": "19",
+              "winner": true
+            },
+            {
+              "homeAway": "away",
+              "team": {
+                "abbreviation": "JAX",
+                "displayName": "Jacksonville Jaguars"
+              },
+              "score": "14",
+              "winner": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401671874",
+      "competitions": [
+        {
+          "id": "401671874",
+          "date": "2024-12-22T21:25Z",
+          "status": {
+            "type": {
+              "id": "3",
+              "name": "STATUS_FINAL",
+              "state": "post",
+              "completed": true
+            }
+          },
+          "competitors": [
+            {
+              "homeAway": "home",
+              "team": {
+                "abbreviation": "MIA",
+                "displayName": "Miami Dolphins"
+              },
+              "score": "29",
+              "winner": true
+            },
+            {
+              "homeAway": "away",
+              "team": {
+                "abbreviation": "SF",
+                "displayName": "San Francisco 49ers"
+              },
+              "score": "17",
+              "winner": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401671790",
+      "competitions": [
+        {
+          "id": "401671790",
+          "date": "2024-12-23T01:20Z",
+          "status": {
+            "type": {
+              "id": "3",
+              "name": "STATUS_FINAL",
+              "state": "post",
+              "completed": true
+            }
+          },
+          "competitors": [
+            {
+              "homeAway": "home",
+              "team": {
+                "abbreviation": "DAL",
+                "displayName": "Dallas Cowboys"
+              },
+              "score": "26",
+              "winner": true
+            },
+            {
+              "homeAway": "away",
+              "team": {
+                "abbreviation": "TB",
+                "displayName": "Tampa Bay Buccaneers"
+              },
+              "score": "24",
+              "winner": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401671692",
+      "competitions": [
+        {
+          "id": "401671692",
+          "date": "2024-12-24T01:15Z",
+          "status": {
+            "type": {
+              "id": "3",
+              "name": "STATUS_FINAL",
+              "state": "post",
+              "completed": true
+            }
+          },
+          "competitors": [
+            {
+              "homeAway": "home",
+              "team": {
+                "abbreviation": "GB",
+                "displayName": "Green Bay Packers"
+              },
+              "score": "34",
+              "winner": true
+            },
+            {
+              "homeAway": "away",
+              "team": {
+                "abbreviation": "NO",
+                "displayName": "New Orleans Saints"
+              },
+              "score": "0",
+              "winner": false
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

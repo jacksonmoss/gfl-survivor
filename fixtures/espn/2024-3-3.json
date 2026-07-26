@@ -1,0 +1,78 @@
+{
+  "events": [
+    {
+      "id": "401671888",
+      "competitions": [
+        {
+          "id": "401671888",
+          "date": "2025-01-26T20:00Z",
+          "status": {
+            "type": {
+              "id": "3",
+              "name": "STATUS_FINAL",
+              "state": "post",
+              "completed": true
+            }
+          },
+          "competitors": [
+            {
+              "homeAway": "home",
+              "team": {
+                "abbreviation": "PHI",
+                "displayName": "Philadelphia Eagles"
+              },
+              "score": "55",
+              "winner": true
+            },
+            {
+              "homeAway": "away",
+              "team": {
+                "abbreviation": "WSH",
+                "displayName": "Washington Commanders"
+              },
+              "score": "23",
+              "winner": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401671887",
+      "competitions": [
+        {
+          "id": "401671887",
+          "date": "2025-01-26T23:30Z",
+          "status": {
+            "type": {
+              "id": "3",
+              "name": "STATUS_FINAL",
+              "state": "post",
+              "completed": true
+            }
+          },
+          "competitors": [
+            {
+              "homeAway": "home",
+              "team": {
+                "abbreviation": "KC",
+                "displayName": "Kansas City Chiefs"
+              },
+              "score": "32",
+              "winner": true
+            },
+            {
+              "homeAway": "away",
+              "team": {
+                "abbreviation": "BUF",
+                "displayName": "Buffalo Bills"
+              },
+              "score": "29",
+              "winner": false
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
