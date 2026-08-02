@@ -224,14 +224,15 @@ export default function AdminPage() {
     setImportResult("");
     if (importAll) {
       const results: string[] = [];
-      for (let week = 1; week <= 22; week++) {
+      const weeks = seasons.find((s) => s.id === importSeasonId)?.weeks ?? [];
+      for (const { weekNumber } of weeks) {
         const res = await fetch("/api/admin/import-schedule", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ seasonId: importSeasonId, weekNumber: week }),
+          body: JSON.stringify({ seasonId: importSeasonId, weekNumber }),
         });
         const data = await res.json();
-        results.push(res.ok ? `W${week}: ${data.imported} imported, ${data.skipped} skipped` : `W${week}: ${data.error}`);
+        results.push(res.ok ? `W${weekNumber}: ${data.imported} imported, ${data.skipped} skipped` : `W${weekNumber}: ${data.error}`);
       }
       setImportResult(results.join("\n"));
     } else {
@@ -609,9 +610,9 @@ export default function AdminPage() {
                 <div className="space-y-1">
                   <label className="text-xs text-gray-500">Week</label>
                   <select value={importWeek} onChange={(e) => setImportWeek(parseInt(e.target.value))} className={select}>
-                    {Array.from({ length: 22 }, (_, i) => i + 1).map((w) => (
-                      <option key={w} value={w}>
-                        {w <= 18 ? `Week ${w}` : ["", "", "Wild Card", "Divisional", "Conf. Championship", "Super Bowl"][w - 18] ?? `Week ${w}`}
+                    {(seasons.find((s) => s.id === importSeasonId)?.weeks ?? []).map((w) => (
+                      <option key={w.id} value={w.weekNumber}>
+                        {w.label}
                       </option>
                     ))}
                   </select>

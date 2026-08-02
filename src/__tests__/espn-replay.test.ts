@@ -28,7 +28,7 @@ function loadFixture(seasonType: number, espnWeek: number): ESPNResponse {
 const ALL_WEEKS = Array.from({ length: 22 }, (_, i) => i + 1).map((weekNumber) => ({
   weekNumber,
   isPlayoff: weekNumber >= 19,
-  ...getESPNWeekParams(weekNumber, weekNumber >= 19),
+  ...getESPNWeekParams(weekNumber, weekNumber >= 19, 19),
 }));
 
 /** Build SCHEDULED (0-0) DB games for every event so a FINAL fixture grades. */
@@ -62,11 +62,11 @@ describe("ESPN fixture replay (2024 full season)", () => {
     // Week 18 is the last regular week (seasonType 2); week 19 flips to the
     // playoffs (seasonType 3, espnWeek 1) and week 22 jumps to espnWeek 5 —
     // ESPN's Pro-Bowl-skips-4 quirk. These are the breaks most likely to bite.
-    expect(getESPNWeekParams(18, false)).toEqual({ seasonType: 2, espnWeek: 18 });
-    expect(getESPNWeekParams(19, true)).toEqual({ seasonType: 3, espnWeek: 1 });
-    expect(getESPNWeekParams(20, true)).toEqual({ seasonType: 3, espnWeek: 2 });
-    expect(getESPNWeekParams(21, true)).toEqual({ seasonType: 3, espnWeek: 3 });
-    expect(getESPNWeekParams(22, true)).toEqual({ seasonType: 3, espnWeek: 5 });
+    expect(getESPNWeekParams(18, false, 19)).toEqual({ seasonType: 2, espnWeek: 18 });
+    expect(getESPNWeekParams(19, true, 19)).toEqual({ seasonType: 3, espnWeek: 1 });
+    expect(getESPNWeekParams(20, true, 19)).toEqual({ seasonType: 3, espnWeek: 2 });
+    expect(getESPNWeekParams(21, true, 19)).toEqual({ seasonType: 3, espnWeek: 3 });
+    expect(getESPNWeekParams(22, true, 19)).toEqual({ seasonType: 3, espnWeek: 5 });
 
     // The playoff fixtures shrink each round (6→4→2→1), confirming the mapped
     // files are the right rounds, not just parseable.
