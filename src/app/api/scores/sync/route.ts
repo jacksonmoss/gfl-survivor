@@ -51,7 +51,13 @@ export async function POST() {
     return NextResponse.json({ synced: 0, graded: 0, message: "No active games" });
   }
 
-  const { seasonType, espnWeek } = getESPNWeekParams(currentWeek.weekNumber, currentWeek.isPlayoff);
+  const firstPlayoffWeek =
+    activeSeason.weeks.find((w) => w.isPlayoff)?.weekNumber ?? currentWeek.weekNumber;
+  const { seasonType, espnWeek } = getESPNWeekParams(
+    currentWeek.weekNumber,
+    currentWeek.isPlayoff,
+    firstPlayoffWeek
+  );
   const url = buildESPNUrl(activeSeason.year, seasonType, espnWeek);
 
   let res: Response;
