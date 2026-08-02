@@ -103,7 +103,7 @@ src/
 │       ├── teams/                  # GET list, POST create/join/leave
 │       └── admin/
 │           ├── import-schedule/    # POST — import NFL schedule from ESPN for a season week + prime betting spreads (admin only)
-│           ├── invites/            # GET/POST invite codes (admin only)
+│           ├── invites/            # GET/POST/PATCH invite codes (admin only); POST {multiUse} creates/rotates the league link, PATCH toggles disabled
 │           ├── season/             # GET/POST seasons (admin only)
 │           ├── users/              # GET user list (admin only)
 │           ├── reset-password/     # POST — admin generates a temp password for a user (last resort)
@@ -128,6 +128,7 @@ src/
     ├── types.ts                    # NextAuth session/JWT type augmentation
     ├── prisma.ts                   # Singleton PrismaClient with PrismaPg adapter
     ├── teams.ts                    # pure team-name validation (trim/blank/collision/self-rename); route delegates to it (tested)
+    ├── invites.ts                  # pure invite logic: human-friendly league code gen + checkInviteUsable (single vs multi-use, cap, disable, expiry); register + admin routes delegate (tested)
     ├── datetime.ts                 # pure formatKickoff — date+time with a timezone label; shared by picks UI + reminder emails (tested)
     └── nfl-teams.ts                # All 32 NFL teams with abbreviations, names, conference, division
 ```
@@ -137,12 +138,14 @@ src/
 ```
 User ──┬── Pick (one per user per week, unique on userId+weekId)
        ├── Team (optional, for team trophy)
-       ├── InviteCode (used one to register)
+       ├── InviteCode (used one to register; inviteCodeUsed no longer unique — many users can share a multi-use code)
        ├── InviteCode[] (created, if admin)
        ├── PasswordResetToken[] (single-use, hashed, 1h expiry)
        ├── ReminderLog[] (one per user+week+slot; idempotency ledger for pick reminders)
        ├── email (optional, unique; used for password reset + reminders)
        └── emailReminders (bool, default true; opt-out toggle in Settings)
+
+InviteCode (single-use cuid OR multi-use "league invite": multiUse + optional maxUses cap + disabled kill switch)
 
 Season ── Week[] ── Game[] (NFL games with scores/status + cached weatherJson + spreadHome)
                  ├── Pick[] (all user picks for that week)
@@ -175,6 +178,7 @@ Team ── User[] (members, for team trophy standings)
 - **Week selector** — dropdown `<select>` with status indicators (checkmark=win, X=loss, bullet=pending)
 - **Admin role** — only admins see the Admin nav link; API routes check `session.user.role === "ADMIN"`
 - **Invite-only** — registration requires an invite code; admins generate them from the admin panel
+- **Multi-use league invite** (#110) — besides opaque single-use cuid codes (one per person), an admin can mint **one reusable "league invite"**: a human-friendly `GFL-<year>-XXXX` code (`generateLeagueCode` in `src/lib/invites.ts`, 4-char suffix from an unambiguous alphabet — no `0/O/1/I/L`) shared as a copyable `/register?invite=<code>` link. The register route delegates the "may this code be used?" decision to the pure `checkInviteUsable` (single-use rejects once consumed; multi-use rejects only when **disabled**, **expired**, or at its optional **maxUses** cap). Schema: `InviteCode.multiUse`/`maxUses`/`disabled` (additive), and `User.inviteCodeUsed` **dropped its `@unique`** so many users can trace to one shared code (the `usedBy` relation is now `User[]`). Guard rails, since a shared link is only as private as the group chat: admin can **rotate** (POST `{multiUse:true}` mints a new code and `disabled`s the prior active one — one active link at a time) and **disable/enable** (PATCH). The UI warns anyone with the link can join. The cap is **not** enforced atomically across concurrent registrations (a couple over the cap at worst — fine for a small league; see #113). The code embeds the year but isn't tied to a `Season` row — per-season is achieved by rotating, sidestepping the open year-over-year-accounts question. Pairs with #111 (link prefill on register) + #112 (minimal form).
 - **Season creation** auto-generates all 22 weeks (18 regular + 4 playoff) with correct point values
 - **Pick visibility** — other users' picks are hidden until the picked team's game kicks off. Admins see all picks. Users always see their own. This is enforced in the leaderboard API, not via a DB setting. The leaderboard's "Show Picks" toggle only controls client-side display of the already-visibility-filtered picks; it can't reveal anything the API withheld.
 - **Persisted client toggles** — client-only UI state that should survive navigation within a session (e.g. the leaderboard "Show Picks" toggle) is persisted in `localStorage` via a `useSyncExternalStore`-backed helper (see `usePersistedToggle` in `leaderboard/page.tsx`). Use `useSyncExternalStore` (server snapshot returns the default) rather than reading `localStorage` in a `useEffect` + `setState` — the latter trips the `react-hooks/set-state-in-effect` lint rule and risks an SSR/client hydration mismatch.
@@ -209,7 +213,7 @@ Team ── User[] (members, for team trophy standings)
 - [x] Docker Compose + PostgreSQL
 - [x] Prisma schema, migrations, generated client
 - [x] NextAuth authentication (credentials, JWT, role-based)
-- [x] Invite-only registration
+- [x] Invite-only registration (single-use per-person codes + a reusable multi-use "league invite" link with rotate/disable/cap — #110)
 - [x] Pick page with per-game kickoff locking
 - [x] Leaderboard (player standings + team trophy)
 - [x] Settings page (display name, real name, email, reminders, password change; team management is admin-only)
@@ -260,6 +264,7 @@ src/__tests__/
 ├── weather.test.ts         # Open-Meteo URL/parse, cache staleness, compass/icon/format — src/lib/weather.ts
 ├── odds.test.ts            # Odds-API URL/parse, median spread, refresh gate, spread display format — src/lib/odds.ts
 ├── teams.test.ts           # Team name validation (trim, blank, collision, self-rename) — src/lib/teams.ts
+├── invites.test.ts         # League code gen + checkInviteUsable (single/multi-use, cap, disable, expiry), normalizeMaxUses — src/lib/invites.ts
 ├── datetime.test.ts        # formatKickoff zone/label output across timezones — src/lib/datetime.ts
 └── espn-replay.test.ts     # Replays real 2024 ESPN fixtures through the parser + grader (#109) — see below
 ```
@@ -288,10 +293,10 @@ The `e2e/` suite drives the **real UI** in a browser — use it (or extend a spe
 e2e/
 ├── global-setup.ts     # drops/recreates a throwaway `gfl_e2e` DB, runs migrate deploy + seed-e2e
 ├── helpers.ts          # ADMIN/PLAYER1 creds, loginAs(page, ...)
-├── auth.spec.ts        # login/register/logout
+├── auth.spec.ts        # login/register/logout + multi-use league invite (many users, one code — #110)
 ├── picks.spec.ts       # pick submit/change/lock + weather/dome strip (#69) + betting-spread strip (#72) + kickoff TZ label (#90)
 ├── leaderboard.spec.ts # standings + team trophy
-├── z-admin.spec.ts     # admin panel: invites, season create, team create + rename
+├── z-admin.spec.ts     # admin panel: invites (single-use + league link rotate — #110), season create, team create + rename
 ├── password-reset.spec.ts
 └── mobile.spec.ts      # runs only under the `mobile` project (iPhone 14 viewport)
 ```

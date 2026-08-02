@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { checkInviteUsable } from "@/lib/invites";
 
 export async function POST(req: NextRequest) {
   const { username, password, displayName, inviteCode } = await req.json();
@@ -21,25 +22,20 @@ export async function POST(req: NextRequest) {
 
   const invite = await prisma.inviteCode.findUnique({
     where: { code: inviteCode },
-    include: { usedBy: true },
+    include: { _count: { select: { usedBy: true } } },
   });
 
   if (!invite) {
     return NextResponse.json({ error: "Invalid invite code" }, { status: 400 });
   }
 
-  if (invite.usedBy) {
-    return NextResponse.json(
-      { error: "Invite code already used" },
-      { status: 400 }
-    );
-  }
-
-  if (invite.expiresAt && invite.expiresAt < new Date()) {
-    return NextResponse.json(
-      { error: "Invite code has expired" },
-      { status: 400 }
-    );
+  // Single-use codes reject once consumed; multi-use league codes stay open
+  // until disabled, expired, or at their optional cap. See src/lib/invites.ts.
+  // (The cap isn't enforced atomically across concurrent registrations — fine
+  // for a small league; a couple over the cap at worst.)
+  const usable = checkInviteUsable(invite, invite._count.usedBy);
+  if (!usable.ok) {
+    return NextResponse.json({ error: usable.error }, { status: 400 });
   }
 
   const existing = await prisma.user.findUnique({ where: { username } });
