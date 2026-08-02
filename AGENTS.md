@@ -103,7 +103,7 @@ src/
 │       ├── teams/                  # GET list, POST create/join/leave
 │       └── admin/
 │           ├── import-schedule/    # POST — import NFL schedule from ESPN for a season week + prime betting spreads (admin only)
-│           ├── invites/            # GET/POST invite codes (admin only)
+│           ├── invites/            # GET/POST/PATCH invite codes (admin only); POST {multiUse} creates/rotates the league link, PATCH toggles disabled
 │           ├── season/             # GET/POST seasons (admin only)
 │           ├── users/              # GET user list (admin only)
 │           ├── reset-password/     # POST — admin generates a temp password for a user (last resort)
@@ -128,6 +128,7 @@ src/
     ├── types.ts                    # NextAuth session/JWT type augmentation
     ├── prisma.ts                   # Singleton PrismaClient with PrismaPg adapter
     ├── teams.ts                    # pure team-name validation (trim/blank/collision/self-rename); route delegates to it (tested)
+    ├── invites.ts                  # pure invite logic: human-friendly league code gen + checkInviteUsable (single vs multi-use, cap, disable, expiry); register + admin routes delegate (tested)
     ├── datetime.ts                 # pure formatKickoff — date+time with a timezone label; shared by picks UI + reminder emails (tested)
     └── nfl-teams.ts                # All 32 NFL teams with abbreviations, names, conference, division
 ```
@@ -137,12 +138,14 @@ src/
 ```
 User ──┬── Pick (one per user per week, unique on userId+weekId)
        ├── Team (optional, for team trophy)
-       ├── InviteCode (used one to register)
+       ├── InviteCode (used one to register; inviteCodeUsed no longer unique — many users can share a multi-use code)
        ├── InviteCode[] (created, if admin)
        ├── PasswordResetToken[] (single-use, hashed, 1h expiry)
        ├── ReminderLog[] (one per user+week+slot; idempotency ledger for pick reminders)
        ├── email (optional, unique; used for password reset + reminders)
        └── emailReminders (bool, default true; opt-out toggle in Settings)
+
+InviteCode (single-use cuid OR multi-use "league invite": multiUse + optional maxUses cap + disabled kill switch)
 
 Season ── Week[] ── Game[] (NFL games with scores/status + cached weatherJson + spreadHome)
                  ├── Pick[] (all user picks for that week)
@@ -175,6 +178,9 @@ Team ── User[] (members, for team trophy standings)
 - **Week selector** — dropdown `<select>` with status indicators (checkmark=win, X=loss, bullet=pending)
 - **Admin role** — only admins see the Admin nav link; API routes check `session.user.role === "ADMIN"`
 - **Invite-only** — registration requires an invite code; admins generate them from the admin panel
+- **Multi-use league invite** (#110) — besides opaque single-use cuid codes (one per person), an admin can mint **one reusable "league invite"**: a human-friendly `GFL-<year>-XXXX` code (`generateLeagueCode` in `src/lib/invites.ts`, 4-char suffix from an unambiguous alphabet — no `0/O/1/I/L`) shared as a copyable `/register?invite=<code>` link. The register route delegates the "may this code be used?" decision to the pure `checkInviteUsable` (single-use rejects once consumed; multi-use rejects only when **disabled**, **expired**, or at its optional **maxUses** cap). Schema: `InviteCode.multiUse`/`maxUses`/`disabled` (additive), and `User.inviteCodeUsed` **dropped its `@unique`** so many users can trace to one shared code (the `usedBy` relation is now `User[]`). Guard rails, since a shared link is only as private as the group chat: admin can **rotate** (POST `{multiUse:true}` mints a new code and `disabled`s the prior active one — one active link at a time) and **disable/enable** (PATCH). The UI warns anyone with the link can join. The cap is **not** enforced atomically across concurrent registrations (a couple over the cap at worst — fine for a small league; see #123). The code embeds the year but isn't tied to a `Season` row — per-season is achieved by rotating, sidestepping the open year-over-year-accounts question. Pairs with #112 (minimal form).
+- **Invite link prefill** (#111) — `/register` reads the `?invite=<code>` query param (via `useSearchParams`, so `RegisterForm` is wrapped in a `<Suspense>` boundary — same pattern as `/reset-password`; keeps the page statically prerenderable), **prefills** the code into a hidden field and **hides** the raw code box, showing a friendly "Joining GFL Survivor" line instead. Manual entry is the fallback when there's no param. The API is unchanged — the hidden field still posts `inviteCode`, so an invalid/disabled linked code surfaces the **same** on-submit error as manual entry (no silent failure). Tap the shared link → pick a name + password → done.
+- **Name-based signup** (#112) — the register form collects **first name + last name + username**, but only **username + password** are required (first/last are optional). This variant keeps `username` as the login identifier (unlike the original #112 sketch, which dropped it), so `src/lib/auth.ts`/login/`types.ts`/`e2e/helpers.ts` are **unchanged** — login is still keyed on `username`. The first/last name fold into the existing name columns via the pure, unit-tested `deriveProfileNames` (`src/lib/register.ts`): `displayName` = first name, or the username when blank (it's a required column, never empty); `realName` = `"First Last"` (trimmed, either part optional) or null. The register route delegates to it and normalizes/trims `username` before the uniqueness check (friendlier "That username's taken" message). No schema/migration change — only the register form + route touch this. E2E covers the username-only path (`E2EINVITE2` in `seed-e2e.ts`).
 - **Season creation** auto-generates all 22 weeks (18 regular + 4 playoff) with correct point values
 - **Pick visibility** — other users' picks are hidden until the picked team's game kicks off. Admins see all picks. Users always see their own. This is enforced in the leaderboard API, not via a DB setting. The leaderboard's "Show Picks" toggle only controls client-side display of the already-visibility-filtered picks; it can't reveal anything the API withheld.
 - **Persisted client toggles** — client-only UI state that should survive navigation within a session (e.g. the leaderboard "Show Picks" toggle) is persisted in `localStorage` via a `useSyncExternalStore`-backed helper (see `usePersistedToggle` in `leaderboard/page.tsx`). Use `useSyncExternalStore` (server snapshot returns the default) rather than reading `localStorage` in a `useEffect` + `setState` — the latter trips the `react-hooks/set-state-in-effect` lint rule and risks an SSR/client hydration mismatch.
@@ -209,7 +215,7 @@ Team ── User[] (members, for team trophy standings)
 - [x] Docker Compose + PostgreSQL
 - [x] Prisma schema, migrations, generated client
 - [x] NextAuth authentication (credentials, JWT, role-based)
-- [x] Invite-only registration
+- [x] Invite-only registration (single-use per-person codes + a reusable multi-use "league invite" link with rotate/disable/cap — #110)
 - [x] Pick page with per-game kickoff locking
 - [x] Leaderboard (player standings + team trophy)
 - [x] Settings page (display name, real name, email, reminders, password change; team management is admin-only)
@@ -226,6 +232,8 @@ Team ── User[] (members, for team trophy standings)
 - [x] Auto-grade picks — picks graded automatically when games go FINAL
 - [x] Client-side live polling — picks page polls every 30s during active game windows
 - [x] Vitest test suite — unit tests for pure logic extracted to `lib/` (NFL teams, ESPN, pick locking/visibility/grading, reset tokens, reminders, team-name validation)
+- [x] DB-backed full-season simulator (#108) — `pnpm sim:season` plays a 22-week season through the real Prisma + grading lib against a disposable `gfl_sim` DB; invariants also run as a `SIM_DATABASE_URL`-gated Vitest integration test in CI's `sim` job. Part A of the season dry-run plan; part B (real ESPN fixtures, #109) is done — see below.
+- [x] ESPN fixture replay (#109) — part B of the dry-run: `src/__tests__/espn-replay.test.ts` replays a real 2024 season (weeks 1-18 + all 4 playoff rounds) from committed `fixtures/espn/*.json` through the actual parser + grader, proving the regular→playoff transition, the SB `espnWeek=5` quirk, `WSH`→`WAS` mapping, and that all 285 grades match ESPN's own results. Recorder: `pnpm record:espn`. Network-free test. Surfaced + fixed a Tie-handling doc bug (code grades away, not home, on a tie).
 - [x] Playwright E2E suite (#29) — `e2e/` drives the real UI (auth, picks, leaderboard, admin, password reset) across `desktop` + `mobile` (iPhone 14) projects; own throwaway `gfl_e2e` DB seeded per run
 - [x] Season history — leaderboard has a season selector to view any season's final standings + team trophy
 - [x] Password reset — email-based self-service reset (nodemailer/SMTP, console fallback) with admin temp-password reset as last resort
@@ -238,7 +246,7 @@ Team ── User[] (members, for team trophy standings)
 
 ## What Still Needs to Be Done
 
-- [ ] **Tie handling** — score sync currently picks the home team as winner on ties. NFL regular season games can't tie (overtime rules), but worth verifying edge cases.
+- [ ] **Tie handling** — score sync currently grades the **away** team as the winner on a tie (`computeGameUpdate` uses a strict `homeScore > awayScore`, so an equal score falls to the away branch). This is pinned in `espn-replay.test.ts` and is a known TODO; a proper tie result (`PUSH`/no-grade) is the real fix. NFL regular-season games can tie (rare, after OT). (Note: an earlier version of this line claimed *home* wins — the replay fixture test in #109 surfaced that the code actually awards away.)
 - [ ] **CI security scanning** — #26: add dependency vulnerability scanning (osv-scanner/npm audit) and consider CodeQL/secret scanning to `.github/workflows/ci.yml`, alongside the existing lint/test/build job.
 - [ ] **Weather follow-ups** (split from #16): #101 refresh weather **and** spreads via cron (not just on picks-page load) — combines the former #67/#74. (#69 E2E coverage + seed fixture for the weather/dome strip: done.)
 - [ ] **Betting-spread follow-ups** (split from #17): #73 make the odds refresh gate multi-instance safe, #101 populate spreads via cron (combined with weather, was #74). (#72 E2E + seed coverage for the spread strip: done.)
@@ -258,10 +266,27 @@ src/__tests__/
 ├── weather.test.ts         # Open-Meteo URL/parse, cache staleness, compass/icon/format — src/lib/weather.ts
 ├── odds.test.ts            # Odds-API URL/parse, median spread, refresh gate, spread display format — src/lib/odds.ts
 ├── teams.test.ts           # Team name validation (trim, blank, collision, self-rename) — src/lib/teams.ts
-└── datetime.test.ts        # formatKickoff zone/label output across timezones — src/lib/datetime.ts
+├── invites.test.ts         # League code gen + checkInviteUsable (single/multi-use, cap, disable, expiry), normalizeMaxUses — src/lib/invites.ts
+├── datetime.test.ts        # formatKickoff zone/label output across timezones — src/lib/datetime.ts
+├── register.test.ts        # deriveProfileNames: first/last/username → displayName/realName (#112) — src/lib/register.ts
+└── espn-replay.test.ts     # Replays real 2024 ESPN fixtures through the parser + grader (#109) — see below
 ```
 
-These cover the core business logic extracted from API routes: kickoff locking, pick visibility (own picks always visible, admin sees all, others hidden until kickoff), grading (WIN/LOSS determination), playoff point escalation, and team-name validation. **When you add or change logic, extract it to a `lib/` helper and unit-test it in the same change — don't leave it inline in the route and don't defer coverage to a follow-up ticket.** API routes aren't unit-tested directly (they depend on Prisma/NextAuth); the E2E suite exercises them through the UI instead.
+These cover the core business logic extracted from API routes: kickoff locking, pick visibility (own picks always visible, admin sees all, others hidden until kickoff), grading (WIN/LOSS determination), playoff point escalation, and team-name validation.
+
+### DB-backed full-season simulator (#108)
+
+`prisma/sim-season.ts` (run with `pnpm sim:season`) plays a whole 22-week season through the **real Prisma schema and the real grading lib** (`computeAllGameUpdates`), not an in-memory re-implementation — so the *workflow* (season create → weekly picks honoring the no-reuse rule → FINAL ESPN payload → grade → totals/trophy) is proven, not just the arithmetic. It seeds the 22 weeks via the shared `buildSeasonWeeks` helper (#107), 10 players + 3 trophy teams, and a deterministic seeded schedule (round-robin regular season, all 32 teams once/week; a reserved 12-team playoff pool so every player reaches week 22 with unused bracket teams available). Home always wins in the playoffs so each round (2/3/4/5 pt) reliably grades a WIN. The CLI logs a per-week play-by-play + final standings/trophy and exits non-zero on any invariant violation. It only ever touches a **disposable** DB (`assertSafeSimUrl` refuses the dev DB / `postgres`); default `gfl_sim`, override with `SIM_DATABASE_URL`.
+
+The same invariants run as a Vitest integration test (`src/__tests__/sim-season.integration.test.ts`) so CI catches regressions — it's **gated on `SIM_DATABASE_URL`** (`describe.skipIf`), so a plain `pnpm test` (no DB) skips it and never touches dev data. A dedicated workflow (`.github/workflows/sim.yml`, separate from `ci.yml`) provides a throwaway Postgres and sets the env. Because the full-season replay is heavier than the unit tests, it's gated by a **paths filter** — it runs on PRs *and* pushes to dev/master, but only when a file that could change the outcome is touched (`prisma/sim-season.ts`, `prisma/schema.prisma`, `prisma/migrations/**`, `src/lib/{season,score-sync,espn,nfl-teams}.ts`, the integration test, `pnpm-lock.yaml`, or the workflow itself). Paths filters must live at the workflow trigger level, which is why this is its own file rather than a job in `ci.yml`. The fast `season.test.ts` still guards the pure logic on every PR. Run locally with `SIM_DATABASE_URL=postgresql://gfl:gfl_dev_password@localhost:5433/gfl_sim pnpm test sim-season`. This is **part A** of the season dry-run plan; **part B** (replaying the grader against captured real ESPN fixtures) is the ESPN fixture replay below (#109). **When you add or change logic, extract it to a `lib/` helper and unit-test it in the same change — don't leave it inline in the route and don't defer coverage to a follow-up ticket.** API routes aren't unit-tested directly (they depend on Prisma/NextAuth); the E2E suite exercises them through the UI instead.
+
+### ESPN fixture replay (#109) — part B of the season dry-run
+
+`src/__tests__/espn-replay.test.ts` replays a **real completed season** (2024) through the *actual* ESPN parser + grader (`computeAllGameUpdates`/`computeGameUpdate`), catching the breaks synthetic data (#108) can't: the regular→playoff `seasonType`/week transition (`getESPNWeekParams`), the Super-Bowl `espnWeek=5` quirk (ESPN skips 4 for the Pro Bowl), and team-abbr edge cases (ESPN `WSH` → our `WAS`). Fixtures live in `fixtures/espn/2024-<seasonType>-<espnWeek>.json` — **one committed JSON per (year, seasonType, espnWeek)**, 22 files, ~300KB total. They're **not raw ESPN dumps**: the recorder projects each payload down to exactly the fields the parser navigates (event/competition ids, date, `status.type`, competitors' `homeAway`/abbr/`displayName`/`score`/`winner`), copied verbatim, which is ~10× smaller (raw is ~140KB/week) yet drives the identical parse path. The test is **network-free** (fixtures only) and runs in the normal `pnpm test`.
+
+Key assertions: every week parses and every FINAL game produces exactly one graded transition; each game's score-derived winner equals ESPN's own `winner:true` flag (mapped through `mapTeamAbbr`), i.e. all 285 grades match the known 2024 results; the four playoff rounds map correctly and shrink 6→4→2→1; a real `WSH`-win grades as `WAS`; the Super Bowl grades PHI over KC. The **tie** case is pinned with a synthetic FINAL event — and the replay *surfaced a doc bug*: the code grades the **away** team on a tie (strict `homeScore > awayScore` falls to the away branch), not home as the old Tie-handling TODO claimed. The test pins the real behavior; the TODO wording was corrected.
+
+Regenerate fixtures with `pnpm record:espn` (`scripts/record-espn-season.ts`; `YEAR=2023 pnpm record:espn` for another season). It's a **one-off recorder** — the only step that hits the live ESPN API — using the same `buildESPNUrl`/`getESPNWeekParams` the sync route does, so fixture filenames map 1:1 to real ESPN queries. Not part of CI.
 
 ### End-to-end (Playwright)
 
@@ -271,10 +296,10 @@ The `e2e/` suite drives the **real UI** in a browser — use it (or extend a spe
 e2e/
 ├── global-setup.ts     # drops/recreates a throwaway `gfl_e2e` DB, runs migrate deploy + seed-e2e
 ├── helpers.ts          # ADMIN/PLAYER1 creds, loginAs(page, ...)
-├── auth.spec.ts        # login/register/logout
+├── auth.spec.ts        # login/register/logout + multi-use league invite (many users, one code — #110) + ?invite= link prefill (#111) + username-only signup (#112)
 ├── picks.spec.ts       # pick submit/change/lock + weather/dome strip (#69) + betting-spread strip (#72) + kickoff TZ label (#90)
 ├── leaderboard.spec.ts # standings + team trophy
-├── z-admin.spec.ts     # admin panel: invites, season create, team create + rename
+├── z-admin.spec.ts     # admin panel: invites (single-use + league link rotate — #110), season create, team create + rename
 ├── password-reset.spec.ts
 └── mobile.spec.ts      # runs only under the `mobile` project (iPhone 14 viewport)
 ```

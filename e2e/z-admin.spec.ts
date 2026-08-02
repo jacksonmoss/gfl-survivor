@@ -22,6 +22,20 @@ test.describe("Admin panel", () => {
     await expect(page.locator("text=New invite code")).toBeVisible();
   });
 
+  test("admin sees the reusable league invite link and can rotate it", async ({ page }) => {
+    await loginAs(page, ADMIN.username, ADMIN.password);
+    await page.goto("/admin");
+    await page.getByRole("button", { name: "Invites" }).click();
+    // The seeded multi-use code renders as an active copyable link (#110).
+    await expect(page.locator("text=Active link")).toBeVisible();
+    const link = page.locator("text=/register?invite=GFL-LEAGUE-E2E");
+    await expect(link).toBeVisible();
+    // Rotating replaces it with a freshly generated GFL-<year>-XXXX link.
+    await page.getByRole("button", { name: "Rotate" }).click();
+    await expect(page.locator("text=/register?invite=GFL-LEAGUE-E2E")).not.toBeVisible();
+    await expect(page.locator("text=Active link")).toBeVisible();
+  });
+
   test("admin can rename a team", async ({ page }) => {
     await loginAs(page, ADMIN.username, ADMIN.password);
     await page.goto("/admin");

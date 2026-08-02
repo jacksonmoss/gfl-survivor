@@ -50,7 +50,7 @@ model User {
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt
   picks          Pick[]
-  inviteCodeUsed String?              @unique
+  inviteCodeUsed String?
   inviteCode     InviteCode?          @relation("UsedBy", fields: [inviteCodeUsed], references: [code])
   createdInvites InviteCode[]         @relation("CreatedBy")
   teamId         String?
@@ -75,7 +75,16 @@ model InviteCode {
   code      String    @unique @default(cuid())
   createdBy String
   creator   User      @relation("CreatedBy", fields: [createdBy], references: [id])
-  usedBy    User?     @relation("UsedBy")
+  // Users who registered with this code. Single-use codes have at most one;
+  // multi-use "league invite" codes accumulate many (the FK on User is no
+  // longer unique). Traceability for both flows lives here.
+  usedBy    User[]    @relation("UsedBy")
+  // Reusable league invite: skips the single-use "already used" rejection.
+  multiUse  Boolean   @default(false)
+  // Optional guard rails for a shared link — cap total registrations (null =
+  // unlimited) and a kill switch. A shared link must not be permanent+unlimited.
+  maxUses   Int?
+  disabled  Boolean   @default(false)
   expiresAt DateTime?
   createdAt DateTime  @default(now())
 }

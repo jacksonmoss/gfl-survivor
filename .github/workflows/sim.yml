@@ -1,0 +1,69 @@
+name: Season Simulation
+
+# DB-backed full-season simulator (#108) — plays a whole 22-week season through
+# the real Prisma schema + grading lib and asserts the workflow invariants, so a
+# regression in season creation / grading / totals fails CI. Uses a throwaway
+# gfl_sim database (recreated by the test), never dev data.
+#
+# The full-season replay is heavier than the unit tests, so it lives in its own
+# workflow gated by a paths filter: it runs on PRs and pushes to dev/master, but
+# only when a file that could change the outcome is touched. The fast
+# season.test.ts still guards the pure logic on every PR via ci.yml.
+on:
+  push:
+    branches: [dev, master]
+    paths: &sim-paths
+      - "prisma/sim-season.ts"
+      - "prisma/schema.prisma"
+      - "prisma/migrations/**"
+      - "src/lib/season.ts"
+      - "src/lib/score-sync.ts"
+      - "src/lib/espn.ts"
+      - "src/lib/nfl-teams.ts"
+      - "src/__tests__/sim-season.integration.test.ts"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/sim.yml"
+  pull_request:
+    branches: [dev, master]
+    paths: *sim-paths
+
+jobs:
+  sim:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: gfl
+          POSTGRES_PASSWORD: gfl_dev_password
+          POSTGRES_DB: postgres
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      SIM_DATABASE_URL: postgresql://gfl:gfl_dev_password@localhost:5433/gfl_sim
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.x
+
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        name: Install pnpm
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.x
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm prisma generate
+
+      - name: Run season simulation
+        run: pnpm exec vitest run sim-season.integration
