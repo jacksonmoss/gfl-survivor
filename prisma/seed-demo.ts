@@ -132,6 +132,7 @@ async function main() {
   await prisma.pick.deleteMany();
   await prisma.game.deleteMany();
   await prisma.week.deleteMany();
+  await prisma.teamMembership.deleteMany();
   await prisma.season.deleteMany();
   await prisma.user.deleteMany({ where: { role: "PLAYER" } });
   await prisma.team.deleteMany();
@@ -181,7 +182,6 @@ async function main() {
         realName: p.realName ?? null,
         role: "PLAYER",
         inviteCodeUsed: invite.code,
-        teamId: p.team ? teamMap.get(p.team) ?? null : null,
       },
     });
     players.set(p.username, user.id);
@@ -192,6 +192,16 @@ async function main() {
   // Create season
   const season = await prisma.season.create({
     data: { year: 2025, isActive: true },
+  });
+
+  // Season-scoped roster memberships (#120): assign each player to their team
+  // for this season.
+  await prisma.teamMembership.createMany({
+    data: PLAYER_NAMES.filter((p) => p.team).map((p) => ({
+      userId: players.get(p.username)!,
+      seasonId: season.id,
+      teamId: teamMap.get(p.team!)!,
+    })),
   });
 
   // Create all 22 weeks
