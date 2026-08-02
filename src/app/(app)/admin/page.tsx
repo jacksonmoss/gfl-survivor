@@ -9,7 +9,6 @@ interface AdminUser {
   displayName: string;
   email: string | null;
   role: string;
-  teamId: string | null;
 }
 
 interface Team {
@@ -56,6 +55,10 @@ export default function AdminPage() {
   const [assignTeamId, setAssignTeamId] = useState("");
   const [renameTeamId, setRenameTeamId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  // Rosters lock once the active season's first game kicks off; an explicit
+  // admin override re-enables editing (season-scoped rosters, #120).
+  const [rostersLocked, setRostersLocked] = useState(false);
+  const [overrideLock, setOverrideLock] = useState(false);
 
   // Season tab
   const [newYear, setNewYear] = useState(new Date().getFullYear());
@@ -89,6 +92,7 @@ export default function AdminPage() {
       if (teamsRes.ok) {
         const data = await teamsRes.json();
         setTeams(data.teams ?? []);
+        setRostersLocked(Boolean(data.locked));
       }
       if (seasonsRes.ok) {
         const data = await seasonsRes.json();
@@ -151,7 +155,7 @@ export default function AdminPage() {
     const res = await fetch("/api/teams", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "assign", userId: assignUserId, teamId: assignTeamId }),
+      body: JSON.stringify({ action: "assign", userId: assignUserId, teamId: assignTeamId, override: overrideLock }),
     });
     if (res.ok) toast.success("Player assigned");
     else toast.error((await res.json()).error);
@@ -164,7 +168,7 @@ export default function AdminPage() {
     const res = await fetch("/api/teams", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "unassign", userId }),
+      body: JSON.stringify({ action: "unassign", userId, override: overrideLock }),
     });
     if (res.ok) toast.success("Player removed from team");
     else toast.error((await res.json()).error);
@@ -198,7 +202,7 @@ export default function AdminPage() {
     const res = await fetch("/api/teams", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "delete", teamId }),
+      body: JSON.stringify({ action: "delete", teamId, override: overrideLock }),
     });
     if (res.ok) toast.success("Team deleted");
     else toast.error((await res.json()).error);
@@ -320,7 +324,17 @@ export default function AdminPage() {
   const singleUseCodes = invites.filter((c) => !c.multiUse);
   const availableCodes = singleUseCodes.filter((c) => c.usedBy.length === 0).length;
 
-  const unassignedUsers = users.filter((u) => !u.teamId && u.role !== "ADMIN");
+  // A user's team for the active season is derived from the season-scoped
+  // roster memberships returned by /api/teams (not a global User.teamId).
+  const teamNameByUser = new Map<string, string>();
+  const assignedUserIds = new Set<string>();
+  for (const t of teams) {
+    for (const m of t.members) {
+      teamNameByUser.set(m.id, t.name);
+      assignedUserIds.add(m.id);
+    }
+  }
+  const unassignedUsers = users.filter((u) => !assignedUserIds.has(u.id) && u.role !== "ADMIN");
   const tabs: { id: Tab; label: string }[] = [
     { id: "players", label: "Players" },
     { id: "teams", label: "Teams" },
@@ -376,7 +390,7 @@ export default function AdminPage() {
                       {u.email ?? <span className="text-gray-600">—</span>}
                     </td>
                     <td className="px-4 py-3 text-gray-400 text-sm">
-                      {teams.find((t) => t.id === u.teamId)?.name ?? <span className="text-gray-600">—</span>}
+                      {teamNameByUser.get(u.id) ?? <span className="text-gray-600">—</span>}
                     </td>
                     <td className="px-4 py-3 hidden sm:table-cell">
                       <span className={`text-xs px-2 py-0.5 rounded-full ${u.role === "ADMIN" ? "bg-blue-900/50 text-blue-300 border border-blue-800" : "bg-white/5 text-gray-500"}`}>
@@ -437,6 +451,25 @@ export default function AdminPage() {
               </button>
             </form>
           </div>
+
+          {/* Roster lock notice + admin override */}
+          {rostersLocked && (
+            <div className="rounded-xl border border-amber-800/60 bg-amber-950/40 p-4 text-sm text-amber-200 space-y-2">
+              <p>
+                <span className="font-medium">Rosters are locked.</span> The season has started, so
+                team rosters are frozen for this season&apos;s trophy.
+              </p>
+              <label className="flex items-center gap-2 text-amber-100">
+                <input
+                  type="checkbox"
+                  checked={overrideLock}
+                  onChange={(e) => setOverrideLock(e.target.checked)}
+                  className="rounded border-amber-700"
+                />
+                Override lock and edit anyway
+              </label>
+            </div>
+          )}
 
           {/* Assign member */}
           <div className="rounded-xl border border-white/10 bg-white/5 p-5 space-y-3">

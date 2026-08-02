@@ -129,6 +129,7 @@ src/
     ├── prisma.ts                   # Singleton PrismaClient with PrismaPg adapter
     ├── teams.ts                    # pure team-name validation (trim/blank/collision/self-rename); route delegates to it (tested)
     ├── invites.ts                  # pure invite logic: human-friendly league code gen + checkInviteUsable (single vs multi-use, cap, disable, expiry); register + admin routes delegate (tested)
+    ├── rosters.ts                  # pure season-scoped roster logic: rostersLocked (first-kickoff lock), computeRolloverMemberships (new-season copy), buildTeamStandings (season-keyed trophy grouping) — #120 (tested)
     ├── datetime.ts                 # pure formatKickoff — date+time with a timezone label; shared by picks UI + reminder emails (tested)
     └── nfl-teams.ts                # All 32 NFL teams with abbreviations, names, conference, division
 ```
@@ -137,7 +138,7 @@ src/
 
 ```
 User ──┬── Pick (one per user per week, unique on userId+weekId)
-       ├── Team (optional, for team trophy)
+       ├── TeamMembership[] (optional; season-scoped roster — one team per user per season)
        ├── InviteCode (used one to register; inviteCodeUsed no longer unique — many users can share a multi-use code)
        ├── InviteCode[] (created, if admin)
        ├── PasswordResetToken[] (single-use, hashed, 1h expiry)
@@ -147,11 +148,14 @@ User ──┬── Pick (one per user per week, unique on userId+weekId)
 
 InviteCode (single-use cuid OR multi-use "league invite": multiUse + optional maxUses cap + disabled kill switch)
 
-Season ── Week[] ── Game[] (NFL games with scores/status + cached weatherJson + spreadHome)
-                 ├── Pick[] (all user picks for that week)
-                 └── ReminderLog[] (reminders sent for that week)
+Season ─┬─ Week[] ── Game[] (NFL games with scores/status + cached weatherJson + spreadHome)
+        │        ├── Pick[] (all user picks for that week)
+        │        └── ReminderLog[] (reminders sent for that week)
+        └─ TeamMembership[] (this season's rosters)
 
-Team ── User[] (members, for team trophy standings)
+Team ── TeamMembership[] (persistent entity; recurs across seasons)
+
+TeamMembership (userId+seasonId → teamId; @@unique[userId,seasonId] = one team per user per season)
 ```
 
 ## Game Rules (Implemented)
@@ -183,6 +187,7 @@ Team ── User[] (members, for team trophy standings)
 - **Name-based signup** (#112) — the register form collects **first name + last name + username**, but only **username + password** are required (first/last are optional). This variant keeps `username` as the login identifier (unlike the original #112 sketch, which dropped it), so `src/lib/auth.ts`/login/`types.ts`/`e2e/helpers.ts` are **unchanged** — login is still keyed on `username`. The first/last name fold into the existing name columns via the pure, unit-tested `deriveProfileNames` (`src/lib/register.ts`): `displayName` = first name, or the username when blank (it's a required column, never empty); `realName` = `"First Last"` (trimmed, either part optional) or null. The register route delegates to it and normalizes/trims `username` before the uniqueness check (friendlier "That username's taken" message). No schema/migration change — only the register form + route touch this. E2E covers the username-only path (`E2EINVITE2` in `seed-e2e.ts`).
 - **Season creation** auto-generates all 22 weeks (18 regular + 4 playoff) with correct point values
 - **Pick visibility** — other users' picks are hidden until the picked team's game kicks off. Admins see all picks. Users always see their own. This is enforced in the leaderboard API, not via a DB setting. The leaderboard's "Show Picks" toggle only controls client-side display of the already-visibility-filtered picks; it can't reveal anything the API withheld.
+- **Season-scoped team rosters** (#120) — roster membership is per-season, not a single global pointer. A `TeamMembership` join table (`(userId, seasonId) → teamId`, `@@unique[userId, seasonId]`) replaced `User.teamId`, while `Team` stays a persistent entity so "The Sharks" can recur across years. The leaderboard trophy groups by the **selected** season's memberships (`buildTeamStandings` in `src/lib/rosters.ts`), so viewing a past season shows the roster it actually had — later reassignments don't rewrite history. Teams stay **optional**: a user with no membership row for a season is teamless that season (in individual standings, absent from the trophy). On **season create**, rosters **roll over** from the most-recent prior season (`computeRolloverMemberships` — skips a row whose team/user no longer exists; empty if no prior) as the editable default. Roster edits (assign/unassign/delete) go through `/api/teams` against the **active** season and **lock once the season's first game kicks off** (`rostersLocked(firstKickoff, now)`), so the trophy can't be gamed mid-season — with an explicit **admin override** (`override:true` on the request; a checkbox in the admin Teams tab appears when locked) for post-kickoff fixes. Deleting a team is refused if it has memberships in a non-active season (would rewrite past rosters). Team **deletion** cascades on the user relation only; season/team relations are `RESTRICT`, so seeds must clear `teamMembership` before deleting seasons/teams. The migration backfills existing `User.teamId` into memberships for the active season (runs before the column drop). Pure logic (lock, rollover, trophy grouping) lives in `src/lib/rosters.ts` and is unit-tested; the API/route wiring is exercised by the `z-admin` e2e (lock → override → assign → trophy). Follow-ups: **#131** (edit **past-season** rosters — today only the active season is editable, even with the override) and **#132** (archive/retire a team that has past-season history — hard delete is refused for it).
 - **Persisted client toggles** — client-only UI state that should survive navigation within a session (e.g. the leaderboard "Show Picks" toggle) is persisted in `localStorage` via a `useSyncExternalStore`-backed helper (see `usePersistedToggle` in `leaderboard/page.tsx`). Use `useSyncExternalStore` (server snapshot returns the default) rather than reading `localStorage` in a `useEffect` + `setState` — the latter trips the `react-hooks/set-state-in-effect` lint rule and risks an SSR/client hydration mismatch.
 - **ESPN integration** — uses ESPN's public scoreboard API (`site.api.espn.com`). Team abbreviation mapping in `src/lib/espn.ts` (ESPN uses "WSH", we use "WAS"). Games are matched via `externalId` (ESPN event ID) stored on the Game model.
 - **Live score polling** — picks page auto-polls every 30s when games are live/started. Calls `/api/scores/sync` (rate-limited to 1 call per 30s globally) then re-fetches picks data. The sync endpoint is accessible to any authenticated user.
@@ -218,6 +223,7 @@ Team ── User[] (members, for team trophy standings)
 - [x] Invite-only registration (single-use per-person codes + a reusable multi-use "league invite" link with rotate/disable/cap — #110)
 - [x] Pick page with per-game kickoff locking
 - [x] Leaderboard (player standings + team trophy)
+- [x] Season-scoped team rosters (#120) — roster membership is per-season via a `TeamMembership` join table (replaced global `User.teamId`); trophy groups by the viewed season's roster, past seasons keep the roster they had. New seasons roll rosters over from the prior season; edits lock at first kickoff with an admin override. Logic in `src/lib/rosters.ts`.
 - [x] Settings page (display name, real name, email, reminders, password change; team management is admin-only)
 - [x] Admin panel (season creation, invite codes)
 - [x] Mobile-responsive UI across all pages
@@ -265,6 +271,7 @@ src/__tests__/
 ├── weather.test.ts         # Open-Meteo URL/parse, cache staleness, compass/icon/format — src/lib/weather.ts
 ├── odds.test.ts            # Odds-API URL/parse, median spread, refresh gate, spread display format — src/lib/odds.ts
 ├── teams.test.ts           # Team name validation (trim, blank, collision, self-rename) — src/lib/teams.ts
+├── rosters.test.ts         # Season-scoped rosters: lock, rollover (skip deleted team/user), trophy grouping incl. cross-season + teamless — src/lib/rosters.ts (#120)
 ├── invites.test.ts         # League code gen + checkInviteUsable (single/multi-use, cap, disable, expiry), normalizeMaxUses — src/lib/invites.ts
 ├── datetime.test.ts        # formatKickoff zone/label output across timezones — src/lib/datetime.ts
 ├── register.test.ts        # deriveProfileNames: first/last/username → displayName/realName (#112) — src/lib/register.ts
@@ -298,7 +305,7 @@ e2e/
 ├── auth.spec.ts        # login/register/logout + multi-use league invite (many users, one code — #110) + ?invite= link prefill (#111) + username-only signup (#112)
 ├── picks.spec.ts       # pick submit/change/lock + weather/dome strip (#69) + betting-spread strip (#72) + kickoff TZ label (#90)
 ├── leaderboard.spec.ts # standings + team trophy
-├── z-admin.spec.ts     # admin panel: invites (single-use + league link rotate — #110), season create, team create + rename
+├── z-admin.spec.ts     # admin panel: invites (single-use + league link rotate — #110), season create, team create + rename, season-scoped roster lock → override → assign → trophy (#120)
 ├── password-reset.spec.ts
 └── mobile.spec.ts      # runs only under the `mobile` project (iPhone 14 viewport)
 ```

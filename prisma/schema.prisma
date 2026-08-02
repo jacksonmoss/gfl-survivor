@@ -53,8 +53,7 @@ model User {
   inviteCodeUsed String?
   inviteCode     InviteCode?          @relation("UsedBy", fields: [inviteCodeUsed], references: [code])
   createdInvites InviteCode[]         @relation("CreatedBy")
-  teamId         String?
-  team           Team?                @relation(fields: [teamId], references: [id])
+  memberships    TeamMembership[]
   resetTokens    PasswordResetToken[]
   reminderLogs   ReminderLog[]
 }
@@ -90,11 +89,12 @@ model InviteCode {
 }
 
 model Season {
-  id        String   @id @default(cuid())
-  year      Int      @unique
-  isActive  Boolean  @default(false)
-  weeks     Week[]
-  createdAt DateTime @default(now())
+  id          String           @id @default(cuid())
+  year        Int              @unique
+  isActive    Boolean          @default(false)
+  weeks       Week[]
+  memberships TeamMembership[]
+  createdAt   DateTime         @default(now())
 }
 
 model Week {
@@ -153,10 +153,30 @@ model Pick {
 }
 
 model Team {
+  id          String           @id @default(cuid())
+  name        String           @unique
+  memberships TeamMembership[]
+  createdAt   DateTime         @default(now())
+}
+
+// Season-scoped roster membership: one row per (user, season) says which Team
+// that user belonged to *that* season. Team stays a persistent entity so the
+// same team can recur across years; rosters reset per season and past seasons
+// keep the rosters they actually had. A user with no row for a season is
+// teamless that season (competes individually, absent from the trophy tab).
+model TeamMembership {
   id        String   @id @default(cuid())
-  name      String   @unique
-  members   User[]
+  userId    String
+  seasonId  String
+  teamId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  season    Season   @relation(fields: [seasonId], references: [id])
+  team      Team     @relation(fields: [teamId], references: [id])
   createdAt DateTime @default(now())
+
+  @@unique([userId, seasonId]) // one team per user per season
+  @@index([seasonId])
+  @@index([teamId])
 }
 
 // One row per (user, week, reminder slot) — the idempotency ledger that keeps
