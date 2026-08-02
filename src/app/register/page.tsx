@@ -1,12 +1,16 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { authInput, authButton } from "@/lib/ui";
 
-export default function RegisterPage() {
+function RegisterForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // A shared link (#110/#111) carries the code as ?invite=. When present we
+  // prefill + hide the field so the user just picks a name and password.
+  const linkedInvite = searchParams.get("invite")?.trim() ?? "";
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -38,6 +42,91 @@ export default function RegisterPage() {
   }
 
   return (
+    <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-6">
+      {error && (
+        <div className="rounded-lg bg-red-900/50 border border-red-700 p-3 text-sm text-red-300">
+          {error}
+        </div>
+      )}
+
+      {linkedInvite ? (
+        // Prefilled from the link — keep the value posted, but don't make the
+        // user look at a raw code box; a disabled/invalid code still surfaces
+        // the API error above on submit (no silent failure).
+        <>
+          <input type="hidden" name="inviteCode" value={linkedInvite} />
+          <div className="rounded-lg bg-blue-950/50 border border-blue-800 p-3 text-sm text-blue-200">
+            Joining GFL Survivor — just pick a name and password below.
+          </div>
+        </>
+      ) : (
+        <div>
+          <label htmlFor="inviteCode" className="block text-sm font-medium text-gray-300">
+            Invite Code
+          </label>
+          <input
+            id="inviteCode"
+            name="inviteCode"
+            type="text"
+            required
+            className={authInput}
+          />
+        </div>
+      )}
+
+      <div>
+        <label htmlFor="displayName" className="block text-sm font-medium text-gray-300">
+          Display Name
+        </label>
+        <input
+          id="displayName"
+          name="displayName"
+          type="text"
+          required
+          className={authInput}
+        />
+      </div>
+
+      <div>
+        <label htmlFor="username" className="block text-sm font-medium text-gray-300">
+          Username
+        </label>
+        <input
+          id="username"
+          name="username"
+          type="text"
+          required
+          className={authInput}
+        />
+      </div>
+
+      <div>
+        <label htmlFor="password" className="block text-sm font-medium text-gray-300">
+          Password
+        </label>
+        <input
+          id="password"
+          name="password"
+          type="password"
+          required
+          minLength={6}
+          className={authInput}
+        />
+      </div>
+
+      <button
+        type="submit"
+        disabled={loading}
+        className={authButton}
+      >
+        {loading ? "Creating account..." : "Create account"}
+      </button>
+    </form>
+  );
+}
+
+export default function RegisterPage() {
+  return (
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-sm space-y-6 animate-fade-in-up">
         <div className="text-center">
@@ -45,74 +134,9 @@ export default function RegisterPage() {
           <p className="mt-2 text-gray-400">Create your account</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-6">
-          {error && (
-            <div className="rounded-lg bg-red-900/50 border border-red-700 p-3 text-sm text-red-300">
-              {error}
-            </div>
-          )}
-
-          <div>
-            <label htmlFor="inviteCode" className="block text-sm font-medium text-gray-300">
-              Invite Code
-            </label>
-            <input
-              id="inviteCode"
-              name="inviteCode"
-              type="text"
-              required
-              className={authInput}
-            />
-          </div>
-
-          <div>
-            <label htmlFor="displayName" className="block text-sm font-medium text-gray-300">
-              Display Name
-            </label>
-            <input
-              id="displayName"
-              name="displayName"
-              type="text"
-              required
-              className={authInput}
-            />
-          </div>
-
-          <div>
-            <label htmlFor="username" className="block text-sm font-medium text-gray-300">
-              Username
-            </label>
-            <input
-              id="username"
-              name="username"
-              type="text"
-              required
-              className={authInput}
-            />
-          </div>
-
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-300">
-              Password
-            </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              required
-              minLength={6}
-              className={authInput}
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className={authButton}
-          >
-            {loading ? "Creating account..." : "Create account"}
-          </button>
-        </form>
+        <Suspense fallback={<div className="text-center text-gray-400">Loading...</div>}>
+          <RegisterForm />
+        </Suspense>
 
         <p className="text-center text-sm text-gray-400">
           Already have an account?{" "}
