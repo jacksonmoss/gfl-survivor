@@ -49,12 +49,15 @@ async function main() {
     },
   });
 
-  // Fresh invite code for use in the registration test
-  await prisma.inviteCode.upsert({
-    where: { code: "E2EINVITE1" },
-    update: {},
-    create: { code: "E2EINVITE1", createdBy: admin.id },
-  });
+  // Fresh single-use invite codes for the registration tests (one per test that
+  // consumes a code — single-use codes reject once used).
+  for (const code of ["E2EINVITE1", "E2EINVITE2"]) {
+    await prisma.inviteCode.upsert({
+      where: { code },
+      update: {},
+      create: { code, createdBy: admin.id },
+    });
+  }
 
   // Reusable multi-use "league invite" (#110) — many users can register with it.
   await prisma.inviteCode.upsert({

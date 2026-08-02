@@ -26,7 +26,8 @@ function RegisterForm() {
       body: JSON.stringify({
         username: formData.get("username"),
         password: formData.get("password"),
-        displayName: formData.get("displayName"),
+        firstName: formData.get("firstName"),
+        lastName: formData.get("lastName"),
         inviteCode: formData.get("inviteCode"),
       }),
     });
@@ -74,17 +75,31 @@ function RegisterForm() {
         </div>
       )}
 
-      <div>
-        <label htmlFor="displayName" className="block text-sm font-medium text-gray-300">
-          Display Name
-        </label>
-        <input
-          id="displayName"
-          name="displayName"
-          type="text"
-          required
-          className={authInput}
-        />
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label htmlFor="firstName" className="block text-sm font-medium text-gray-300">
+            First name <span className="text-gray-500">(optional)</span>
+          </label>
+          <input
+            id="firstName"
+            name="firstName"
+            type="text"
+            autoComplete="given-name"
+            className={authInput}
+          />
+        </div>
+        <div>
+          <label htmlFor="lastName" className="block text-sm font-medium text-gray-300">
+            Last name <span className="text-gray-500">(optional)</span>
+          </label>
+          <input
+            id="lastName"
+            name="lastName"
+            type="text"
+            autoComplete="family-name"
+            className={authInput}
+          />
+        </div>
       </div>
 
       <div>
@@ -96,6 +111,7 @@ function RegisterForm() {
           name="username"
           type="text"
           required
+          autoComplete="username"
           className={authInput}
         />
       </div>

@@ -2,13 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { checkInviteUsable } from "@/lib/invites";
+import { deriveProfileNames } from "@/lib/register";
 
 export async function POST(req: NextRequest) {
-  const { username, password, displayName, inviteCode } = await req.json();
+  const { username, password, firstName, lastName, inviteCode } = await req.json();
 
-  if (!username || !password || !displayName || !inviteCode) {
+  // Only the username + password are required; first/last name are optional.
+  if (!username?.trim() || !password || !inviteCode) {
     return NextResponse.json(
-      { error: "All fields are required" },
+      { error: "Username and password are required" },
       { status: 400 }
     );
   }
@@ -38,21 +40,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: usable.error }, { status: 400 });
   }
 
-  const existing = await prisma.user.findUnique({ where: { username } });
+  const normalizedUsername = username.trim();
+  const existing = await prisma.user.findUnique({
+    where: { username: normalizedUsername },
+  });
   if (existing) {
     return NextResponse.json(
-      { error: "Username already taken" },
+      { error: "That username's taken — try another." },
       { status: 400 }
     );
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
+  const { displayName, realName } = deriveProfileNames({
+    firstName,
+    lastName,
+    username: normalizedUsername,
+  });
 
   await prisma.user.create({
     data: {
-      username,
+      username: normalizedUsername,
       passwordHash,
       displayName,
+      realName,
       inviteCodeUsed: invite.code,
     },
   });
