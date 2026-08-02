@@ -55,6 +55,24 @@ test.describe("Authentication", () => {
     await expect(page).toHaveURL("/picks");
   });
 
+  test("multiple users register with the same league invite code", async ({ page }) => {
+    // Multi-use code (#110): unlike a single-use code, it isn't consumed.
+    for (const suffix of ["a", "b"]) {
+      await page.goto("/register");
+      await page.fill("#inviteCode", "GFL-LEAGUE-E2E");
+      await page.fill("#displayName", `League Player ${suffix}`);
+      await page.fill("#username", `leagueplayer_${suffix}`);
+      await page.fill("#password", "leaguepass123");
+      await page.click('button[type="submit"]');
+      await expect(page).toHaveURL(/\/login/);
+    }
+
+    await page.fill("#username", "leagueplayer_b");
+    await page.fill("#password", "leaguepass123");
+    await page.click('button[type="submit"]');
+    await expect(page).toHaveURL("/picks");
+  });
+
   test("register with already-used invite code shows error", async ({ page }) => {
     await page.goto("/register");
     await page.fill("#inviteCode", "USED-BY-P1");

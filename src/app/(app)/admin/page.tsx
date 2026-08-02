@@ -25,6 +25,16 @@ interface Season {
   weeks: { id: string; label: string; weekNumber: number; _count: { games: number; picks: number } }[];
 }
 
+interface Invite {
+  id: string;
+  code: string;
+  multiUse: boolean;
+  disabled: boolean;
+  maxUses: number | null;
+  usedBy: { displayName: string; username: string }[];
+  createdAt: string;
+}
+
 type Tab = "players" | "teams" | "season" | "import" | "invites";
 
 export default function AdminPage() {
@@ -59,7 +69,8 @@ export default function AdminPage() {
 
   // Invites tab
   const [latestCode, setLatestCode] = useState<string | null>(null);
-  const [availableCodes, setAvailableCodes] = useState(0);
+  const [invites, setInvites] = useState<Invite[]>([]);
+  const [maxUsesInput, setMaxUsesInput] = useState("");
 
   const loadAll = useCallback(async () => {
     try {
@@ -85,9 +96,7 @@ export default function AdminPage() {
         if (data.length > 0) setImportSeasonId((prev) => prev || data[0].id);
       }
       if (invitesRes.ok) {
-        const data = await invitesRes.json();
-        const available = (data as { usedBy: unknown }[]).filter((c) => !c.usedBy).length;
-        setAvailableCodes(available);
+        setInvites(await invitesRes.json());
       }
     } finally {
       // Clear the initial skeleton even if a fetch fails, so sections fall
@@ -256,10 +265,59 @@ export default function AdminPage() {
     if (res.ok) {
       const data = await res.json();
       setLatestCode(data.code);
-      setAvailableCodes((n) => n + 1);
+      await loadAll();
     }
     setLoading(false);
   }
+
+  async function createLeagueInvite() {
+    setLoading(true);
+    const res = await fetch("/api/admin/invites", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ multiUse: true, maxUses: maxUsesInput || null }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      toast.success(leagueInvite ? "League link rotated" : "League link created");
+      await loadAll();
+    } else {
+      toast.error(data.error ?? "Something went wrong");
+    }
+    setLoading(false);
+  }
+
+  async function toggleInviteDisabled(id: string, disabled: boolean) {
+    setLoading(true);
+    const res = await fetch("/api/admin/invites", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, disabled }),
+    });
+    if (res.ok) toast.success(disabled ? "League link disabled" : "League link enabled");
+    else toast.error((await res.json()).error ?? "Something went wrong");
+    await loadAll();
+    setLoading(false);
+  }
+
+  function inviteLink(code: string) {
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    return `${origin}/register?invite=${encodeURIComponent(code)}`;
+  }
+
+  async function copyLink(code: string) {
+    try {
+      await navigator.clipboard.writeText(inviteLink(code));
+      toast.success("Invite link copied");
+    } catch {
+      toast.error("Couldn't copy — copy it manually");
+    }
+  }
+
+  // The active shared link is the newest enabled multi-use code (list is desc).
+  const leagueInvite = invites.find((c) => c.multiUse && !c.disabled) ?? null;
+  const singleUseCodes = invites.filter((c) => !c.multiUse);
+  const availableCodes = singleUseCodes.filter((c) => c.usedBy.length === 0).length;
 
   const unassignedUsers = users.filter((u) => !u.teamId && u.role !== "ADMIN");
   const tabs: { id: Tab; label: string }[] = [
@@ -578,12 +636,90 @@ export default function AdminPage() {
 
       {/* Invites tab */}
       {!initialLoad && tab === "invites" && (
-        <div className="space-y-4">
+        <div className="space-y-6">
+          {/* League invite — one reusable link for the whole league */}
+          <div className="rounded-xl border border-white/10 bg-white/5 p-5 space-y-4">
+            <div>
+              <h3 className="text-sm font-medium text-gray-300">League Invite Link</h3>
+              <p className="text-xs text-gray-500 mt-0.5">
+                One reusable link the whole league joins with — share it in the group chat.
+              </p>
+            </div>
+
+            {leagueInvite ? (
+              <div className="space-y-3">
+                <div className="rounded-lg bg-blue-950 border border-blue-800 p-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs text-blue-400">Active link</p>
+                    {leagueInvite.maxUses != null && (
+                      <span className="text-xs text-blue-300/80">
+                        {leagueInvite.usedBy.length}/{leagueInvite.maxUses} used
+                      </span>
+                    )}
+                  </div>
+                  <p className="font-mono text-white text-sm break-all">{inviteLink(leagueInvite.code)}</p>
+                  <div className="flex gap-2 flex-wrap">
+                    <button onClick={() => copyLink(leagueInvite.code)} className={btn}>
+                      Copy Link
+                    </button>
+                    <button onClick={createLeagueInvite} disabled={loading} className={btnGhost}>
+                      Rotate
+                    </button>
+                    <button
+                      onClick={() => toggleInviteDisabled(leagueInvite.id, true)}
+                      disabled={loading}
+                      className={btnDanger}
+                    >
+                      Disable
+                    </button>
+                  </div>
+                </div>
+                <p className="text-xs text-yellow-600">
+                  ⚠ Anyone with this link can join. Rotate it to invalidate the old link, or set a usage cap.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {/* A disabled league link may exist — offer to re-enable it. */}
+                {invites.find((c) => c.multiUse && c.disabled) && (
+                  <div className="rounded-lg bg-white/5 border border-white/10 p-3 flex items-center justify-between gap-2">
+                    <p className="text-xs text-gray-400">A league link exists but is disabled.</p>
+                    <button
+                      onClick={() =>
+                        toggleInviteDisabled(invites.find((c) => c.multiUse && c.disabled)!.id, false)
+                      }
+                      disabled={loading}
+                      className={btnGhost}
+                    >
+                      Re-enable
+                    </button>
+                  </div>
+                )}
+                <div className="flex gap-2 flex-wrap items-center">
+                  <input
+                    type="number"
+                    min={1}
+                    value={maxUsesInput}
+                    onChange={(e) => setMaxUsesInput(e.target.value)}
+                    placeholder="Max uses (optional)"
+                    className={`${input} w-48`}
+                  />
+                  <button onClick={createLeagueInvite} disabled={loading} className={btn}>
+                    Create League Link
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Legacy per-person single-use codes */}
           <div className="rounded-xl border border-white/10 bg-white/5 p-5 space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-medium text-gray-300">Invite Codes</h3>
-                <p className="text-xs text-gray-500 mt-0.5">{availableCodes} unused code{availableCodes !== 1 ? "s" : ""} available</p>
+                <h3 className="text-sm font-medium text-gray-300">Single-Use Codes</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {availableCodes} unused code{availableCodes !== 1 ? "s" : ""} available — one code per person.
+                </p>
               </div>
               <button onClick={generateInvite} disabled={loading} className={btn}>
                 Generate
@@ -628,3 +764,5 @@ function AdminSkeleton() {
 const input = "w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors";
 const select = "rounded-lg border border-white/10 bg-gray-900 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none";
 const btn = "rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 active:scale-95 disabled:opacity-50 transition-all";
+const btnGhost = "rounded-lg border border-white/15 bg-white/5 px-4 py-2 text-sm font-medium text-gray-200 hover:bg-white/10 active:scale-95 disabled:opacity-50 transition-all";
+const btnDanger = "rounded-lg border border-red-800 bg-red-950/50 px-4 py-2 text-sm font-medium text-red-300 hover:bg-red-900/50 active:scale-95 disabled:opacity-50 transition-all";

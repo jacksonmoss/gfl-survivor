@@ -56,6 +56,13 @@ async function main() {
     create: { code: "E2EINVITE1", createdBy: admin.id },
   });
 
+  // Reusable multi-use "league invite" (#110) — many users can register with it.
+  await prisma.inviteCode.upsert({
+    where: { code: "GFL-LEAGUE-E2E" },
+    update: { multiUse: true, disabled: false },
+    create: { code: "GFL-LEAGUE-E2E", createdBy: admin.id, multiUse: true },
+  });
+
   const season = await prisma.season.upsert({
     where: { year: 2025 },
     update: { isActive: true },
