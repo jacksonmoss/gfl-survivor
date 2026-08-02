@@ -20,6 +20,12 @@ export interface GameUpdate {
   justFinished: boolean;
   winnerTeam: string | null;
   losingTeam: string | null;
+  /**
+   * Set when a just-finished game ended level. On a tie there is no winner/loser
+   * (both are null), so the route grades every pick on it as a PUSH (0 points,
+   * not a win). Distinguishes "tie" from "not yet final" (where all three are null).
+   */
+  isTie: boolean;
 }
 
 export interface ImportableGame {
@@ -59,15 +65,22 @@ export function computeGameUpdate(event: ESPNEvent, dbGame: DbGame): GameUpdate 
   const justFinished = newStatus === "FINAL" && dbGame.status !== "FINAL";
   let winnerTeam: string | null = null;
   let losingTeam: string | null = null;
+  let isTie = false;
 
   if (justFinished) {
-    const homeTeam = mapTeamAbbr(homeComp.team.abbreviation);
-    const awayTeam = mapTeamAbbr(awayComp.team.abbreviation);
-    winnerTeam = homeScore > awayScore ? homeTeam : awayTeam;
-    losingTeam = homeScore > awayScore ? awayTeam : homeTeam;
+    if (homeScore === awayScore) {
+      // A level game is a push: no winner, no loser — the route grades both
+      // teams' picks as PUSH (0 pts). NFL regular-season games can tie after OT.
+      isTie = true;
+    } else {
+      const homeTeam = mapTeamAbbr(homeComp.team.abbreviation);
+      const awayTeam = mapTeamAbbr(awayComp.team.abbreviation);
+      winnerTeam = homeScore > awayScore ? homeTeam : awayTeam;
+      losingTeam = homeScore > awayScore ? awayTeam : homeTeam;
+    }
   }
 
-  return { gameId: dbGame.id, homeScore, awayScore, status: newStatus, justFinished, winnerTeam, losingTeam };
+  return { gameId: dbGame.id, homeScore, awayScore, status: newStatus, justFinished, winnerTeam, losingTeam, isTie };
 }
 
 /**

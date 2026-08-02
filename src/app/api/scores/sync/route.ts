@@ -109,6 +109,21 @@ export async function POST() {
         });
         graded++;
       }
+    } else if (update.justFinished && update.isTie) {
+      // Level game: grade both teams' picks as a PUSH (0 points, not a win).
+      // winnerTeam/losingTeam are null on a tie, so pull the two teams off the game.
+      const game = currentWeek.games.find((g) => g.id === update.gameId);
+      if (game) {
+        const tiePicks = await prisma.pick.updateMany({
+          where: {
+            weekId: currentWeek.id,
+            team: { in: [game.homeTeam, game.awayTeam] },
+            result: "PENDING",
+          },
+          data: { result: "PUSH", points: 0 },
+        });
+        graded += tiePicks.count;
+      }
     }
   }
 
