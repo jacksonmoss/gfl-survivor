@@ -227,12 +227,13 @@ export default function LeaderboardPage() {
                             <tbody>
                               <tr>
                                 {player.picks.sort((a, b) => a.week - b.week).map((pick) => {
-                                  const glyph = pick.result === "WIN" ? "✓" : pick.result === "LOSS" ? "✗" : "–";
-                                  const word = pick.result === "WIN" ? "Win" : pick.result === "LOSS" ? "Loss" : "Pending";
+                                  const glyph = pick.result === "WIN" ? "✓" : pick.result === "LOSS" ? "✗" : pick.result === "PUSH" ? "=" : "–";
+                                  const word = pick.result === "WIN" ? "Win" : pick.result === "LOSS" ? "Loss" : pick.result === "PUSH" ? "Tie" : "Pending";
                                   return (
                                   <td key={pick.week} className={`pr-5 ${
                                     pick.result === "WIN" ? "text-green-400" :
                                     pick.result === "LOSS" ? "text-red-400" :
+                                    pick.result === "PUSH" ? "text-yellow-400" :
                                     "text-gray-500"
                                   }`}>
                                     {pick.team} <span aria-hidden="true">{glyph}</span>

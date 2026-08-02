@@ -23,7 +23,7 @@ interface SimPick {
   playerId: string;
   weekNumber: number;
   team: string;
-  result: "WIN" | "LOSS";
+  result: "WIN" | "LOSS" | "PUSH";
   points: number;
 }
 
@@ -35,7 +35,9 @@ function gradePickResult(
   awayTeam: string,
   homeScore: number,
   awayScore: number
-): "WIN" | "LOSS" {
+): "WIN" | "LOSS" | "PUSH" {
+  // A level game is a push for both teams — no winner, no loser (#113).
+  if (homeScore === awayScore) return "PUSH";
   const winner = homeScore > awayScore ? homeTeam : awayTeam;
   return pickTeam === winner ? "WIN" : "LOSS";
 }
@@ -339,6 +341,31 @@ describe("Full Season Simulation", () => {
       for (const pick of allPicks.filter((p) => p.result === "LOSS")) {
         expect(pick.points).toBe(0);
       }
+    });
+
+    it("a level game grades both teams' pickers as a PUSH — 0 points, not a win (#113)", () => {
+      const home = gradePickResult("KC", "KC", "BUF", 20, 20);
+      const away = gradePickResult("BUF", "KC", "BUF", 20, 20);
+      expect(home).toBe("PUSH");
+      expect(away).toBe("PUSH");
+      // Points follow the same rule the sim/route use: only a WIN earns points.
+      const points = (r: "WIN" | "LOSS" | "PUSH") => (r === "WIN" ? 1 : 0);
+      expect(points(home)).toBe(0);
+      expect(points(away)).toBe(0);
+    });
+
+    it("win% treats a tie as a push — excluded from the denominator (#113)", () => {
+      // wins / (wins + losses) — a PUSH is in neither, so it neither helps nor
+      // hurts, matching the leaderboard route's winPct.
+      const picks: SimPick[] = [
+        { playerId: "p", weekNumber: 1, team: "KC", result: "WIN", points: 1 },
+        { playerId: "p", weekNumber: 2, team: "BUF", result: "PUSH", points: 0 },
+        { playerId: "p", weekNumber: 3, team: "SF", result: "LOSS", points: 0 },
+      ];
+      const wins = picks.filter((p) => p.result === "WIN").length;
+      const losses = picks.filter((p) => p.result === "LOSS").length;
+      const winPct = wins / (wins + losses || 1);
+      expect(winPct).toBe(0.5); // 1 win, 1 loss, tie ignored — not 1/3
     });
 
     it("each player's total equals the sum of their weekly points", () => {
