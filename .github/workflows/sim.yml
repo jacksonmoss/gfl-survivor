@@ -1,14 +1,17 @@
 name: Season Simulation
 
-# DB-backed full-season simulator (#108) — plays a whole 22-week season through
-# the real Prisma schema + grading lib and asserts the workflow invariants, so a
-# regression in season creation / grading / totals fails CI. Uses a throwaway
-# gfl_sim database (recreated by the test), never dev data.
+# The DB-backed tests (`*.integration.test.ts`) — they need a real Postgres, so
+# they live here rather than in ci.yml:
+#   - full-season simulator (#108): plays a whole 22-week season through the real
+#     Prisma schema + grading lib and asserts the workflow invariants.
+#   - atomic invite claim (#123): fires concurrent registrations at a capped
+#     league code and asserts the cap holds.
+# Both use throwaway databases (recreated by the tests), never dev data.
 #
-# The full-season replay is heavier than the unit tests, so it lives in its own
-# workflow gated by a paths filter: it runs on PRs and pushes to dev/master, but
-# only when a file that could change the outcome is touched. The fast
-# season.test.ts still guards the pure logic on every PR via ci.yml.
+# They're heavier than the unit tests, so this workflow is gated by a paths
+# filter: it runs on PRs and pushes to dev/master, but only when a file that
+# could change the outcome is touched. The fast season.test.ts / invites.test.ts
+# still guard the pure logic on every PR via ci.yml.
 on:
   push:
     branches: [dev, master]
@@ -20,7 +23,11 @@ on:
       - "src/lib/score-sync.ts"
       - "src/lib/espn.ts"
       - "src/lib/nfl-teams.ts"
+      - "src/lib/invite-claim.ts"
+      - "src/lib/invites.ts"
+      - "src/app/api/auth/register/route.ts"
       - "src/__tests__/sim-season.integration.test.ts"
+      - "src/__tests__/invite-claim.integration.test.ts"
       - "pnpm-lock.yaml"
       - ".github/workflows/sim.yml"
   pull_request:
@@ -65,5 +72,5 @@ jobs:
       - name: Generate Prisma client
         run: pnpm prisma generate
 
-      - name: Run season simulation
-        run: pnpm exec vitest run sim-season.integration
+      - name: Run DB-backed integration tests
+        run: pnpm exec vitest run integration.test
