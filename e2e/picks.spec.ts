@@ -1,8 +1,9 @@
 import { test, expect } from "@playwright/test";
 import { PLAYER1, loginAs } from "./helpers";
 
-// Week 2 is the default selection on load: it has a future-kickoff game,
-// so the picks page auto-advances to it.
+// Week 4 is the default selection on load: it's the first week with a
+// future-kickoff game, so the picks page auto-advances to it. Weeks 1–3 are
+// already played (win, tie, loss for player1).
 
 test.describe("Picks", () => {
   test.beforeEach(async ({ page }) => {
@@ -14,8 +15,8 @@ test.describe("Picks", () => {
     await expect(page.locator("select")).toBeVisible();
   });
 
-  test("week 2 matchups are visible", async ({ page }) => {
-    // Week 2 is auto-selected on load
+  test("current-week matchups are visible", async ({ page }) => {
+    // Week 4 is auto-selected on load
     await expect(page.getByRole("button", { name: /SF/ })).toBeVisible();
     await expect(page.getByRole("button", { name: /DAL/ })).toBeVisible();
   });
@@ -33,8 +34,8 @@ test.describe("Picks", () => {
     // don't also match the picked team button's "✓ Your pick" badge (the
     // optimistic update renders both immediately).
     await expect(page.getByText("Your pick", { exact: true })).toBeVisible();
-    // Week 2 in the selector should now show a "Picked" badge
-    const weekOption = page.locator("select option").filter({ hasText: "Week 2" });
+    // Week 4 in the selector should now show a "Picked" badge
+    const weekOption = page.locator("select option").filter({ hasText: "Week 4" });
     await expect(weekOption).toContainText("Picked");
   });
 
@@ -66,6 +67,54 @@ test.describe("Picks", () => {
       has: page.getByRole("button", { name: /^SF\b/ }),
     });
     await expect(card).toContainText(/\d{1,2}:\d{2}\s?(AM|PM).*\b(?:[A-Z]{2,5}|GMT[+-]\d{1,2})\b/);
+  });
+});
+
+// Tie / push result UI (#128). Week 2 in the E2E seed is a level game
+// (TEN 20 – JAX 20, FINAL) with player1 on TEN and player2 on JAX, both graded
+// PUSH. The tie must read as "Tied" — never as a win or a loss.
+test.describe("Tie / push result", () => {
+  test.beforeEach(async ({ page }) => {
+    await loginAs(page, PLAYER1.username, PLAYER1.password);
+  });
+
+  // Select a week by label fragment — option values are cuids, so read the
+  // value off the matching option first.
+  async function selectWeek(page: import("@playwright/test").Page, label: string) {
+    const value = await page
+      .locator("select option")
+      .filter({ hasText: label })
+      .first()
+      .getAttribute("value");
+    await page.getByLabel("Select week").selectOption(value!);
+  }
+
+  test("week selector badges the tied week as Tied", async ({ page }) => {
+    const weekOption = page.locator("select option").filter({ hasText: "Week 2" });
+    await expect(weekOption).toContainText("Tied");
+  });
+
+  test("season picks table shows the tie as Tied with no points", async ({ page }) => {
+    await page.getByRole("button", { name: /Season picks/ }).click();
+    const row = page.getByRole("row").filter({ hasText: "Week 2" });
+    await expect(row).toContainText("Tennessee Titans");
+    await expect(row).toContainText("Tied");
+    // A push scores nothing, so the points cell renders the em-dash placeholder.
+    await expect(row).toContainText("—");
+    // And it is not rendered as either a win or a loss.
+    await expect(row).not.toContainText("WIN");
+    await expect(row).not.toContainText("LOSS");
+  });
+
+  test("current-pick card shows Tied with the push styling", async ({ page }) => {
+    await selectWeek(page, "Week 2");
+    const card = page.locator("div.animate-pop");
+    await expect(card).toContainText("Tennessee Titans");
+    await expect(card).toContainText("Tied");
+    // Yellow border/background is the push treatment (green = win, red = loss).
+    await expect(card).toHaveClass(/border-yellow-800/);
+    // The matchup card for that week carries the level final score.
+    await expect(page.locator("text=/Final · 20–20/")).toBeVisible();
   });
 });
 

@@ -32,10 +32,10 @@ The `e2e/` suite drives the **real UI** in a browser — use it (or extend a spe
 ```
 e2e/
 ├── global-setup.ts     # drops/recreates a throwaway `gfl_e2e` DB, runs migrate deploy + seed-e2e
-├── helpers.ts          # ADMIN/PLAYER1 creds, loginAs(page, ...)
+├── helpers.ts          # ADMIN/PLAYER1/PLAYER2 creds, loginAs(page, ...)
 ├── auth.spec.ts        # login/register/logout + multi-use league invite (many users, one code — #110) + ?invite= link prefill (#111) + username-only signup (#112)
-├── picks.spec.ts       # pick submit/change/lock + weather/dome strip (#69) + betting-spread strip (#72) + kickoff TZ label (#90)
-├── leaderboard.spec.ts # standings + team trophy
+├── picks.spec.ts       # pick submit/change/lock + tie/push UI (#128) + weather/dome strip (#69) + betting-spread strip (#72) + kickoff TZ label (#90)
+├── leaderboard.spec.ts # standings + team trophy + tie glyph/win% (#128)
 ├── settings.spec.ts    # profile first/last name round-trip + display-name fallbacks (#126); restores player1's seeded profile so later specs still see "Player One"
 ├── z-admin.spec.ts     # admin panel: invites (single-use + league link rotate — #110), season create, team create + rename, season-scoped roster lock → override → assign → trophy (#120)
 ├── password-reset.spec.ts
@@ -46,6 +46,7 @@ e2e/
 - One spec/test: `pnpm exec playwright test z-admin.spec.ts --project=desktop -g "rename a team"`.
 - Two projects (`playwright.config.ts`): `desktop` (Desktop Chrome, ignores `mobile.spec.ts`) and `mobile` (Chromium with iPhone 14 viewport, only `mobile.spec.ts`).
 - Vitest ignores `e2e/**`; the E2E DB (`gfl_e2e`) is separate from the dev DB and rebuilt on every run, so tests can freely create/rename/delete.
+- Seed timeline (`prisma/seed-e2e.ts`): weeks **1–3 are played** for player1 — wk1 win (KC), wk2 **tie** (TEN 20–20 JAX, player2 holds the other side), wk3 loss (NYG) — and **week 4 is the current week** (LAR/SEA live, SF/DAL + GB/CHI upcoming), which the picks page auto-selects as the first week with a game before kickoff. Adding a *past* week means adding it before week 4, not after; a new week with future games would steal that auto-selection.
 - Selector gotcha: a team name renders both as a roster-card `<span>` **and** as an `<option>` in the "Assign Player" `<select>` — scope UI assertions to the card (e.g. filter by the card's Rename button) so `getByText` doesn't match two elements.
 - Race gotcha: a client page that hydrates empty and fills its inputs from a `useEffect` fetch (Settings) will **overwrite anything typed before the response lands**. Assertions auto-retry, so they're safe; `fill()` isn't. Wait for the fetch first (`page.waitForResponse` — see `openSettings` in `settings.spec.ts`), not just for the input to be visible.
 - Specs run **serially in file order** (`workers: 1`, `fullyParallel: false`), so a spec that mutates seeded data other specs assert on must restore it (`settings.spec.ts` resets player1's profile; `z-admin.spec.ts` is `z`-prefixed to run last).
