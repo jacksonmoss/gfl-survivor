@@ -39,6 +39,34 @@ test.describe("Leaderboard", () => {
     await expect(page.getByRole("cell", { name: "KC Win", exact: true })).toBeVisible();
   });
 
+  // Tie / push result on the leaderboard (#128). player1 is 1W/1T/1L in the
+  // seed: week 1 win (KC), week 2 push (TEN, level game), week 3 loss (NYG).
+  test("tied pick renders as '=' with an sr-only 'Tie'", async ({ page }) => {
+    await loginAs(page, PLAYER1.username, PLAYER1.password);
+    await page.goto("/leaderboard");
+    await expect(page.locator("td").filter({ hasText: "Player One" })).toBeVisible();
+    await page.getByRole("button", { name: "Show Picks" }).click();
+    // The glyph itself is aria-hidden, so the cell's accessible name is the
+    // team plus the sr-only word — status is never conveyed by glyph alone.
+    await expect(page.getByRole("cell", { name: "TEN Tie", exact: true })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "TEN Tie", exact: true })).toContainText("=");
+    // The other side of the same level game (player2's pick) is a push too, and
+    // is visible to player1 because that game has kicked off.
+    await expect(page.getByRole("cell", { name: "JAX Tie", exact: true })).toBeVisible();
+  });
+
+  test("a push is excluded from win% (1W/1T/1L reads 50%)", async ({ page }) => {
+    await loginAs(page, PLAYER1.username, PLAYER1.password);
+    await page.goto("/leaderboard");
+    const row = page.locator("tr", { hasText: "Player One" });
+    await expect(row).toContainText("50%");
+    // Counting the tie as a played game would read 33%; as a win, 67%.
+    await expect(row).not.toContainText("33%");
+    await expect(row).not.toContainText("67%");
+    // And the tie scores nothing: the week-1 win is still the only point.
+    await expect(row.locator("td").last()).toHaveText("1");
+  });
+
   test("admin sees Team Trophy tab", async ({ page }) => {
     await loginAs(page, ADMIN.username, ADMIN.password);
     await page.goto("/leaderboard");
