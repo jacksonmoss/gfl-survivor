@@ -5,7 +5,8 @@ import { useToast } from "@/components/toast";
 
 export default function SettingsPage() {
   const [displayName, setDisplayName] = useState("");
-  const [realName, setRealName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [emailReminders, setEmailReminders] = useState(true);
   const [currentPassword, setCurrentPassword] = useState("");
@@ -20,7 +21,8 @@ export default function SettingsPage() {
       .then((data) => {
         if (!data) return;
         setDisplayName(data.displayName ?? "");
-        setRealName(data.realName ?? "");
+        setFirstName(data.firstName ?? "");
+        setLastName(data.lastName ?? "");
         setEmail(data.email ?? "");
         setEmailReminders(data.emailReminders ?? true);
       });
@@ -32,7 +34,7 @@ export default function SettingsPage() {
     const res = await fetch("/api/settings", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ displayName, realName, email, emailReminders }),
+      body: JSON.stringify({ displayName, firstName, lastName, email, emailReminders }),
     });
     const data = await res.json();
     if (res.ok) toast.success("Saved");
@@ -72,26 +74,49 @@ export default function SettingsPage() {
       <div className="rounded-xl border border-white/10 bg-white/5 p-6 space-y-5">
         <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider">Profile</h2>
         <form onSubmit={saveProfile} className="space-y-4">
-          <Field label="Display Name">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="First Name" htmlFor="firstName">
+              <input
+                id="firstName"
+                type="text"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                autoComplete="given-name"
+                placeholder="Jackson"
+                className={input}
+              />
+            </Field>
+            <Field label="Last Name" htmlFor="lastName">
+              <input
+                id="lastName"
+                type="text"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                autoComplete="family-name"
+                placeholder="Moss"
+                className={input}
+              />
+            </Field>
+          </div>
+          <p className="text-xs text-gray-500">
+            Your full name shown on the leaderboard. Leave both blank to hide it.
+          </p>
+          <Field
+            label="Display Name"
+            htmlFor="displayName"
+            hint="The name others see next to your picks. Leave blank to use your first name."
+          >
             <input
+              id="displayName"
               type="text"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              required
               className={input}
             />
           </Field>
-          <Field label="Real Name" hint="Your full name shown on the leaderboard. Leave blank to hide.">
+          <Field label="Email" htmlFor="email" hint="Used for password reset. Leave blank to remove.">
             <input
-              type="text"
-              value={realName}
-              onChange={(e) => setRealName(e.target.value)}
-              placeholder="e.g. Jackson Moss"
-              className={input}
-            />
-          </Field>
-          <Field label="Email" hint="Used for password reset. Leave blank to remove.">
-            <input
+              id="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -161,10 +186,22 @@ export default function SettingsPage() {
   );
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function Field({
+  label,
+  hint,
+  htmlFor,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  htmlFor?: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="space-y-1.5">
-      <label className="block text-sm font-medium text-gray-300">{label}</label>
+      <label htmlFor={htmlFor} className="block text-sm font-medium text-gray-300">
+        {label}
+      </label>
       {children}
       {hint && <p className="text-xs text-gray-500">{hint}</p>}
     </div>

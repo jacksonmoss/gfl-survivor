@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm lint)",
+      "Bash(pnpm lint *)",
+      "Bash(pnpm test)",
+      "Bash(pnpm test *)",
+      "Bash(pnpm build)",
+      "Bash(pnpm build *)",
+      "Bash(pnpm exec tsc --noEmit)",
+      "Bash(pnpm exec tsc --noEmit *)",
+      "Bash(pnpm exec playwright test *)",
+      "Bash(pnpm exec vitest run *)",
+      "Bash(docker compose ps)",
+      "Bash(docker compose ps *)",
+      "Bash(osv-scanner scan *)",
+      "Bash(npm view *)"
+    ]
+  }
+}
