@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { checkInviteUsable } from "@/lib/invites";
+import { claimInviteAndCreateUser } from "@/lib/invite-claim";
 import { deriveProfileNames } from "@/lib/register";
 
 export async function POST(req: NextRequest) {
@@ -33,8 +34,9 @@ export async function POST(req: NextRequest) {
 
   // Single-use codes reject once consumed; multi-use league codes stay open
   // until disabled, expired, or at their optional cap. See src/lib/invites.ts.
-  // (The cap isn't enforced atomically across concurrent registrations — fine
-  // for a small league; a couple over the cap at worst.)
+  // This is a fast pre-check so a bad code fails before we spend ~250ms hashing;
+  // claimInviteAndCreateUser re-runs it under a row lock, which is what actually
+  // enforces the cap against concurrent registrations (#123).
   const usable = checkInviteUsable(invite, invite._count.usedBy);
   if (!usable.ok) {
     return NextResponse.json({ error: usable.error }, { status: 400 });
@@ -58,15 +60,16 @@ export async function POST(req: NextRequest) {
     username: normalizedUsername,
   });
 
-  await prisma.user.create({
-    data: {
-      username: normalizedUsername,
-      passwordHash,
-      displayName,
-      realName,
-      inviteCodeUsed: invite.code,
-    },
+  const claim = await claimInviteAndCreateUser(prisma, {
+    code: invite.code,
+    username: normalizedUsername,
+    passwordHash,
+    displayName,
+    realName,
   });
+  if (!claim.ok) {
+    return NextResponse.json({ error: claim.error }, { status: 400 });
+  }
 
   return NextResponse.json({ success: true });
 }
