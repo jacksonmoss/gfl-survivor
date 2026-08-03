@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { checkInviteUsable } from "@/lib/invites";
 import { claimInviteAndCreateUser } from "@/lib/invite-claim";
-import { deriveProfileNames } from "@/lib/register";
+import { deriveProfileNames, validateNameFields } from "@/lib/register";
 
 export async function POST(req: NextRequest) {
   const { username, password, firstName, lastName, inviteCode } = await req.json();
@@ -21,6 +21,13 @@ export async function POST(req: NextRequest) {
       { error: "Password must be at least 6 characters" },
       { status: 400 }
     );
+  }
+
+  // Bound the free-text identity fields (#137) before any DB work or the ~250ms
+  // bcrypt hash — same reasoning as the invite pre-check below.
+  const lengths = validateNameFields({ username, firstName, lastName });
+  if (!lengths.ok) {
+    return NextResponse.json({ error: lengths.error }, { status: 400 });
   }
 
   const invite = await prisma.inviteCode.findUnique({

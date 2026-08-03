@@ -80,3 +80,35 @@ test.describe("Settings profile", () => {
     await restoreSeededProfile(page);
   });
 });
+
+// #137 — the identity fields are length-capped. The browser attribute is the
+// visible half; the server check is the real one, since a caller can skip the
+// form entirely.
+test.describe("Settings name length limits", () => {
+  test.beforeEach(async ({ page }) => {
+    await loginAs(page, PLAYER1.username, PLAYER1.password);
+    await openSettings(page);
+  });
+
+  test("inputs carry the shared maxLength caps", async ({ page }) => {
+    await expect(page.getByLabel("First Name")).toHaveAttribute("maxlength", "64");
+    await expect(page.getByLabel("Last Name")).toHaveAttribute("maxlength", "64");
+    await expect(page.getByLabel("Display Name")).toHaveAttribute("maxlength", "48");
+  });
+
+  test("the API rejects an over-long display name even when the form is bypassed", async ({
+    page,
+  }) => {
+    // page.request shares the browser context's cookies, so this is a real
+    // authenticated PATCH from player1's session.
+    const res = await page.request.patch("/api/settings", {
+      data: { displayName: "x".repeat(49), firstName: "", lastName: "" },
+    });
+    expect(res.status()).toBe(400);
+    expect((await res.json()).error).toBe("Display name must be 48 characters or less");
+
+    // And the stored profile is untouched.
+    await page.reload();
+    await expect(page.getByLabel("Display Name")).toHaveValue("Player One");
+  });
+});

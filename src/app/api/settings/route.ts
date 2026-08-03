@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { deriveSettingsProfile, splitRealName } from "@/lib/register";
+import { deriveSettingsProfile, splitRealName, validateNameFields } from "@/lib/register";
 import bcrypt from "bcryptjs";
 
 const asText = (value: unknown) => (typeof value === "string" ? value : "");
@@ -34,6 +34,13 @@ export async function PATCH(req: NextRequest) {
   // The profile form always posts all three name fields together; the password
   // form posts none of them, so leave the names alone unless one is present.
   if (displayName !== undefined || firstName !== undefined || lastName !== undefined) {
+    // Same caps as signup (#137). Username isn't editable here (see "Username
+    // is permanent" in AGENTS.md), so only the three name fields are checked.
+    const lengths = validateNameFields({ displayName, firstName, lastName });
+    if (!lengths.ok) {
+      return NextResponse.json({ error: lengths.error }, { status: 400 });
+    }
+
     const names = deriveSettingsProfile({
       firstName: asText(firstName),
       lastName: asText(lastName),

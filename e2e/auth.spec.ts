@@ -135,4 +135,23 @@ test.describe("Authentication", () => {
     await page.click('button[type="submit"]');
     await expect(page.locator("text=Invalid invite code")).toBeVisible();
   });
+
+  // #137 — the signup fields are length-capped, visibly in the form and
+  // (authoritatively) on the server, which a scripted POST can't skip.
+  test("register fields carry maxLength caps and the API enforces them", async ({ page }) => {
+    await page.goto("/register");
+    await expect(page.locator("#username")).toHaveAttribute("maxlength", "32");
+    await expect(page.locator("#firstName")).toHaveAttribute("maxlength", "64");
+    await expect(page.locator("#lastName")).toHaveAttribute("maxlength", "64");
+
+    const res = await page.request.post("/api/auth/register", {
+      data: {
+        inviteCode: "GFL-LEAGUE-E2E",
+        username: "x".repeat(33),
+        password: "pass123456",
+      },
+    });
+    expect(res.status()).toBe(400);
+    expect((await res.json()).error).toBe("Username must be 32 characters or less");
+  });
 });
