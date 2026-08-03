@@ -6,7 +6,10 @@ import {
   getClientIp,
   __resetRateLimiter,
   AUTH_RATE_LIMITS,
+  PROXY_RATE_LIMIT_RULES,
+  findProxyRateLimitRule,
 } from "@/lib/rate-limit";
+import { config as proxyConfig } from "@/proxy";
 
 const config = { max: 3, windowMs: 10_000 };
 
@@ -75,6 +78,51 @@ describe("rateLimit", () => {
       windowMs: 60 * 60_000,
     });
     expect(AUTH_RATE_LIMITS.login).toEqual({ max: 10, windowMs: 15 * 60_000 });
+    expect(AUTH_RATE_LIMITS.register).toEqual({ max: 10, windowMs: 15 * 60_000 });
+  });
+});
+
+// Which paths the proxy guards (#5, #134). The proxy itself is a thin wrapper
+// around this matching, so the decision is tested here rather than through
+// next/server.
+describe("findProxyRateLimitRule", () => {
+  it("matches each guarded auth endpoint on POST", () => {
+    for (const rule of PROXY_RATE_LIMIT_RULES) {
+      expect(findProxyRateLimitRule("POST", rule.path)).toBe(rule);
+    }
+  });
+
+  it("guards registration with its own bucket prefix and limit (#134)", () => {
+    const rule = findProxyRateLimitRule("POST", "/api/auth/register");
+    expect(rule).not.toBeNull();
+    expect(rule!.prefix).toBe("register");
+    expect(rule!.config).toEqual(AUTH_RATE_LIMITS.register);
+  });
+
+  it("ignores non-POST requests", () => {
+    expect(findProxyRateLimitRule("GET", "/api/auth/register")).toBeNull();
+    expect(findProxyRateLimitRule("GET", "/api/auth/forgot-password")).toBeNull();
+  });
+
+  it("ignores unguarded paths, including login (limited in authorize, #46)", () => {
+    expect(findProxyRateLimitRule("POST", "/api/auth/callback/credentials")).toBeNull();
+    expect(findProxyRateLimitRule("POST", "/api/picks")).toBeNull();
+  });
+
+  it("gives every rule a distinct path and prefix, so windows never collide", () => {
+    const paths = PROXY_RATE_LIMIT_RULES.map((r) => r.path);
+    const prefixes = PROXY_RATE_LIMIT_RULES.map((r) => r.prefix);
+    expect(new Set(paths).size).toBe(paths.length);
+    expect(new Set(prefixes).size).toBe(prefixes.length);
+  });
+
+  // A rule the proxy's matcher doesn't list is dead: the proxy never runs for
+  // that path, so the limit silently does nothing.
+  it("is covered by the proxy's matcher for every rule", () => {
+    for (const rule of PROXY_RATE_LIMIT_RULES) {
+      expect(proxyConfig.matcher).toContain(rule.path);
+    }
+    expect(proxyConfig.matcher).toHaveLength(PROXY_RATE_LIMIT_RULES.length);
   });
 });
 
