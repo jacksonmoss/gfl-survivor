@@ -294,13 +294,29 @@ async function main() {
     },
   });
 
+  // A week-4 pick on a game that has NOT kicked off (SF vs DAL is 5 days out).
+  // This is the stats-page leak fixture (#121): week 4 is incomplete, so it must
+  // not appear in the week selector, and "DAL" must not surface anywhere in the
+  // stats — not as a most-picked team, not in a digest.
+  await prisma.pick.upsert({
+    where: { userId_weekId: { userId: player2.id, weekId: week4.id } },
+    update: {},
+    create: {
+      userId: player2.id,
+      weekId: week4.id,
+      team: "DAL",
+      result: "PENDING",
+      points: 0,
+    },
+  });
+
   // Suppress unused-variable warnings — game1 id not needed after upsert
   void game1;
 
   console.log("E2E seed complete.");
   console.log("  admin / admin123");
   console.log("  player1 / player123  (wk1 win, wk2 tie, wk3 loss)");
-  console.log("  player2 / player123  (wk2 tie — other side of TEN/JAX)");
+  console.log("  player2 / player123  (wk2 tie — other side of TEN/JAX; wk4 DAL, pre-kickoff)");
   console.log("  Invite code for registration test: E2EINVITE1");
   console.log("  Season 2025 active, weeks 1–4 seeded (1–3 played, 4 current)");
 }
