@@ -11,6 +11,70 @@ export type RegisterProfileInput = {
   username: string;
 };
 
+// Server-enforced caps on the free-text identity fields (#137). Nothing bounded
+// them before: a 10k-character display name went straight into an unbounded
+// TEXT column and then onto the leaderboard, wrecking the table for everyone.
+// Sized to fit the leaderboard/navbar at mobile width, not to the column type.
+// Only enforced on *write* — existing rows may be longer, so there's
+// deliberately no DB constraint (a migration would fail on them).
+export const NAME_FIELD_LIMITS = {
+  username: 32,
+  firstName: 64,
+  lastName: 64,
+  displayName: 48,
+} as const;
+
+type NameField = keyof typeof NAME_FIELD_LIMITS;
+
+const FIELD_LABELS: Record<NameField, string> = {
+  username: "Username",
+  firstName: "First name",
+  lastName: "Last name",
+  displayName: "Display name",
+};
+
+export type FieldValidationResult =
+  | { ok: true }
+  | { ok: false; field: NameField; error: string };
+
+// Validates whatever identity fields a request actually carries — the register
+// route posts username/first/last, the settings profile form posts
+// first/last/display, and the settings password form posts none of them. Fields
+// left `undefined` are skipped, so "absent" and "cleared" stay distinguishable
+// (a blank first name is a legitimate way to clear it).
+//
+// Lengths are measured after trimming, matching what the derivations store.
+export function validateNameFields(input: {
+  username?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  displayName?: string | null;
+}): FieldValidationResult {
+  for (const field of Object.keys(NAME_FIELD_LIMITS) as NameField[]) {
+    const raw = input[field];
+    if (raw === undefined || raw === null) continue;
+
+    const value = String(raw).trim();
+
+    // Username is the login identifier, so it can't be whitespace-only — that
+    // trims to "" and would otherwise fall through to the required-field check
+    // (or, in settings, silently become the displayName fallback).
+    if (field === "username" && value === "") {
+      return { ok: false, field, error: "Username can't be blank" };
+    }
+
+    if (value.length > NAME_FIELD_LIMITS[field]) {
+      return {
+        ok: false,
+        field,
+        error: `${FIELD_LABELS[field]} must be ${NAME_FIELD_LIMITS[field]} characters or less`,
+      };
+    }
+  }
+
+  return { ok: true };
+}
+
 // Map the (optional) first/last name + username onto the two name columns:
 //   - displayName (required): the handle shown around the app. Prefer the first
 //     name; fall back to the username so it's never blank.

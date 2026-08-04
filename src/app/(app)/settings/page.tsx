@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useToast } from "@/components/toast";
+import { NAME_FIELD_LIMITS } from "@/lib/register";
 
 export default function SettingsPage() {
   const [displayName, setDisplayName] = useState("");
@@ -81,6 +82,7 @@ export default function SettingsPage() {
                 type="text"
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
+                maxLength={NAME_FIELD_LIMITS.firstName}
                 autoComplete="given-name"
                 placeholder="Jackson"
                 className={input}
@@ -92,6 +94,7 @@ export default function SettingsPage() {
                 type="text"
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
+                maxLength={NAME_FIELD_LIMITS.lastName}
                 autoComplete="family-name"
                 placeholder="Moss"
                 className={input}
@@ -111,6 +114,7 @@ export default function SettingsPage() {
               type="text"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
+              maxLength={NAME_FIELD_LIMITS.displayName}
               className={input}
             />
           </Field>
