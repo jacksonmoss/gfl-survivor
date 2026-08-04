@@ -57,6 +57,7 @@ src/
     ├── invites.ts                  # pure invite logic: human-friendly league code gen + checkInviteUsable (single vs multi-use, cap, disable, expiry); register + admin routes delegate (tested)
     ├── rosters.ts                  # pure season-scoped roster logic: rostersLocked (first-kickoff lock), computeRolloverMemberships (new-season copy), buildTeamStandings (season-keyed trophy grouping) — #120 (tested)
     ├── datetime.ts                 # pure formatKickoff — date+time with a timezone label; shared by picks UI + reminder emails (tested)
+    ├── stats.ts                    # pure stats engine: cumulative standings/ranks, lead changes, pick distribution, upsets (via spread), sweeps, streaks → SeasonStats + WeeklyDigest — #121 (tested)
     └── nfl-teams.ts                # All 32 NFL teams with abbreviations, names, conference, division
 ```
 
@@ -86,7 +87,7 @@ src/
 - **Username is permanent** — `username` is the login identifier (`authorize` in `src/lib/auth.ts` keys on it) and is deliberately **not editable** — not in Settings, not in the admin panel. Decided in #136 (closed won't-fix). Renaming silently changes the credential the user types to sign in, leaves a stale `username` in every issued JWT until it refreshes, frees the old handle for someone else to claim, and needs its own anti-cycling guard — a lot of moving parts for a rare need. The "I want to be called something else" case is already covered by the freely editable `displayName`/`realName` (#126); `@username` only appears as a secondary line on the leaderboard and admin lists. A genuine typo at signup is fixed by an admin editing the DB directly. **Don't add a username field to Settings** — if this ever needs revisiting, reopen #136 rather than doing it in passing.
 - **Pick visibility** — other users' picks are hidden until the picked team's game kicks off. Admins see all picks. Users always see their own. This is enforced in the leaderboard API, not via a DB setting. The leaderboard's "Show Picks" toggle only controls client-side display of the already-visibility-filtered picks; it can't reveal anything the API withheld.
 
-Per-feature design rationale (invites #110/#111/#112/#126, season-scoped rosters #120, ESPN sync, weather #16, betting spreads #17, auth rate limiting, password reset, pick reminders, JWT sessions #23, accessibility #54, kickoff formatting #90) lives in the **`design-decisions`** skill — it loads on demand when you work on those features.
+Per-feature design rationale (invites #110/#111/#112/#126, season-scoped rosters #120, ESPN sync, weather #16, betting spreads #17, auth rate limiting, password reset, pick reminders, JWT sessions #23, accessibility #54, kickoff formatting #90, stats page #121) lives in the **`design-decisions`** skill — it loads on demand when you work on those features.
 
 ## Workflow
 
@@ -117,6 +118,7 @@ src/__tests__/
 ├── invites.test.ts         # League code gen + checkInviteUsable (single/multi-use, cap, disable, expiry), normalizeMaxUses — src/lib/invites.ts
 ├── datetime.test.ts        # formatKickoff zone/label output across timezones — src/lib/datetime.ts
 ├── register.test.ts        # deriveProfileNames (#112) + deriveSettingsProfile/splitRealName round-trip (#126) — src/lib/register.ts
+├── stats.test.ts           # Standings/ranks + ties, lead change (incl. first-week null), pick distribution, consensus bust, upsets (no-odds/pick'em/tie skips), sweeps, streaks, season rollup — src/lib/stats.ts (#121)
 └── espn-replay.test.ts     # Replays real 2024 ESPN fixtures through the parser + grader (#109) — see below
 
 DB-backed (gated on SIM_DATABASE_URL, skipped by a plain `pnpm test`):
