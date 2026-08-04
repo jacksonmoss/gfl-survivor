@@ -1,15 +1,13 @@
 # osv-scanner ignore list. Loaded automatically by the CI osv-scan job
 # (google/osv-scanner-action, `osv-scanner -r ./`). Keep every entry justified
 # and time-boxed via `ignoreUntil` so it gets re-reviewed rather than lingering.
-
-[[IgnoredVulns]]
-id = "GHSA-mh99-v99m-4gvg"
-ignoreUntil = 2026-10-24
-# brace-expansion OOM DoS (disclosed 2026-07-24). Dev-only: the sole path is
-# @eslint/config-array -> minimatch@3 -> brace-expansion, which expands
-# developer-authored eslint config globs, not attacker-controlled input, and it
-# is never in the production runtime. OSV lists a single fixed version (5.0.8)
-# that is ESM-only and breaks minimatch@3's CJS `require('brace-expansion')`
-# (eslint fails to run), so there is no toolchain-compatible fix yet. Revisit
-# when eslint's minimatch dep advances or a 1.x/2.x backport lands.
-reason = "dev-only, non-attacker-reachable eslint glob path; no fix compatible with minimatch@3 yet"
+#
+# Currently empty — nothing is suppressed. Prefer bumping the security floor in
+# pnpm-workspace.yaml `overrides:` over adding an entry here; only suppress when
+# there is genuinely no toolchain-compatible fixed version.
+#
+# History: GHSA-mh99-v99m-4gvg (brace-expansion OOM DoS) lived here because its
+# only fixed version at the time was 5.0.8, which is ESM-only and breaks the
+# minimatch@3 that eslint pulls in. A 1.x backport (1.1.17) has since landed, so
+# the override now pins >= 1.1.18 and the suppression was removed rather than
+# renewed.
