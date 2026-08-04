@@ -55,6 +55,7 @@ function allStarted(games: Game[]) {
 function resultColor(result: string) {
   if (result === "WIN") return "text-green-400";
   if (result === "LOSS") return "text-red-400";
+  if (result === "PUSH") return "text-yellow-400";
   return "text-gray-500";
 }
 
@@ -63,6 +64,7 @@ function resultColor(result: string) {
 function resultWord(result: string) {
   if (result === "WIN") return "Won";
   if (result === "LOSS") return "Lost";
+  if (result === "PUSH") return "Tied";
   return "Picked";
 }
 
@@ -233,6 +235,7 @@ export default function PicksPage() {
             <div key={currentPick.team} className={`animate-pop rounded-xl border px-4 py-3 flex items-center justify-between ${
               currentPick.result === "WIN" ? "border-green-700 bg-green-900/20" :
               currentPick.result === "LOSS" ? "border-red-900 bg-red-900/10" :
+              currentPick.result === "PUSH" ? "border-yellow-800 bg-yellow-900/20" :
               "border-white/10 bg-white/5"
             }`}>
               <div className="flex items-center gap-3">
@@ -245,6 +248,8 @@ export default function PicksPage() {
               <span className={`text-sm font-medium ${resultColor(currentPick.result)}`}>
                 {currentPick.result === "PENDING"
                   ? (currentPickLocked ? "Locked" : "Pending")
+                  : currentPick.result === "PUSH"
+                  ? "Tied"
                   : currentPick.result}
                 {currentPick.points > 0 && ` · +${currentPick.points}pts`}
               </span>
@@ -362,7 +367,7 @@ export default function PicksPage() {
                       <tr key={p.id} className="hover:bg-white/5 transition-colors">
                         <td className="px-4 py-2 text-gray-400">{p.week.label}</td>
                         <td className="px-4 py-2">{getTeamName(p.team)}</td>
-                        <td className={`px-4 py-2 text-right ${resultColor(p.result)}`}>{p.result}</td>
+                        <td className={`px-4 py-2 text-right ${resultColor(p.result)}`}>{p.result === "PUSH" ? "Tied" : p.result}</td>
                         <td className="px-4 py-2 text-right text-gray-400">{p.points || "—"}</td>
                       </tr>
                     ))}

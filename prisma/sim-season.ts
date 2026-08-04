@@ -272,7 +272,6 @@ export async function runSeasonSimulation(prisma: PrismaClient, opts: SimOptions
         username,
         passwordHash,
         displayName: username[0].toUpperCase() + username.slice(1),
-        teamId: teamName ? teamsByName.get(teamName)! : null,
       },
     });
     players.push({ id: u.id, username, teamName });
@@ -290,6 +289,13 @@ export async function runSeasonSimulation(prisma: PrismaClient, opts: SimOptions
     include: { weeks: true },
   });
   const weekIdByNumber = new Map(season.weeks.map((w) => [w.weekNumber, w.id]));
+
+  // Season-scoped roster memberships (#120): assign trophy-team players for this season.
+  await prisma.teamMembership.createMany({
+    data: players
+      .filter((p) => p.teamName)
+      .map((p) => ({ userId: p.id, seasonId: season.id, teamId: teamsByName.get(p.teamName!)! })),
+  });
 
   // --- Play each week ---
   for (const week of schedule) {

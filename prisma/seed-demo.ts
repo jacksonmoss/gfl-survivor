@@ -6,69 +6,80 @@ import bcrypt from "bcryptjs";
 const adapter = new PrismaPg(process.env.DATABASE_URL!);
 const prisma = new PrismaClient({ adapter });
 
-// Realistic NFL schedule data for first 3 weeks
+// Realistic NFL schedule data for first 3 weeks.
+//
+// `spread` is the closing home-team line (negative = home favored), same
+// convention as Game.spreadHome. Completed weeks carry lines so the stats page
+// (#121) can identify upsets; a couple of games are left `null` each week to
+// exercise the "no odds posted, skip it" path. The signs are chosen so the
+// favorite usually covers — the deliberate upsets are:
+//   wk1  KC (+3) over BAL      — the week's consensus pick, 4 players burned
+//   wk2  ATL (+4.5) at PHI     — again the consensus pick, 4 burned
+//   wk2  NO (+3) at DAL        — burns lucky13
+//   wk3  BAL (+2.5) over DAL   — burns the two co-leaders
+//   wk3  WAS (+2.5) at CIN     — nobody on it either way
 const WEEK_GAMES = [
   {
     weekNumber: 1,
     games: [
-      { away: "BAL", home: "KC", awayScore: 20, homeScore: 27, day: "Thu", hour: 20 },
-      { away: "PIT", home: "ATL", awayScore: 18, homeScore: 10, day: "Sun", hour: 13 },
-      { away: "ARI", home: "BUF", awayScore: 21, homeScore: 34, day: "Sun", hour: 13 },
-      { away: "TEN", home: "CHI", awayScore: 17, homeScore: 24, day: "Sun", hour: 13 },
-      { away: "JAX", home: "MIA", awayScore: 17, homeScore: 20, day: "Sun", hour: 13 },
-      { away: "CAR", home: "NO", awayScore: 10, homeScore: 47, day: "Sun", hour: 13 },
-      { away: "MIN", home: "NYG", awayScore: 28, homeScore: 6, day: "Sun", hour: 13 },
-      { away: "HOU", home: "IND", awayScore: 29, homeScore: 27, day: "Sun", hour: 13 },
-      { away: "CIN", home: "NE", awayScore: 16, homeScore: 10, day: "Sun", hour: 13 },
-      { away: "CLE", home: "DAL", awayScore: 17, homeScore: 33, day: "Sun", hour: 16 },
-      { away: "LV", home: "LAC", awayScore: 22, homeScore: 10, day: "Sun", hour: 16 },
-      { away: "DEN", home: "SEA", awayScore: 20, homeScore: 26, day: "Sun", hour: 16 },
-      { away: "WAS", home: "TB", awayScore: 20, homeScore: 37, day: "Sun", hour: 16 },
-      { away: "GB", home: "PHI", awayScore: 29, homeScore: 34, day: "Sun", hour: 16 },
-      { away: "LAR", home: "DET", awayScore: 20, homeScore: 26, day: "Sun", hour: 20 },
-      { away: "NYJ", home: "SF", awayScore: 13, homeScore: 32, day: "Mon", hour: 20 },
+      { away: "BAL", home: "KC", awayScore: 20, homeScore: 27, day: "Thu", hour: 20, spread: 3 },
+      { away: "PIT", home: "ATL", awayScore: 18, homeScore: 10, day: "Sun", hour: 13, spread: 2.5 },
+      { away: "ARI", home: "BUF", awayScore: 21, homeScore: 34, day: "Sun", hour: 13, spread: -6.5 },
+      { away: "TEN", home: "CHI", awayScore: 17, homeScore: 24, day: "Sun", hour: 13, spread: -3 },
+      { away: "JAX", home: "MIA", awayScore: 17, homeScore: 20, day: "Sun", hour: 13, spread: -3.5 },
+      { away: "CAR", home: "NO", awayScore: 10, homeScore: 47, day: "Sun", hour: 13, spread: -5.5 },
+      { away: "MIN", home: "NYG", awayScore: 28, homeScore: 6, day: "Sun", hour: 13, spread: 1 },
+      { away: "HOU", home: "IND", awayScore: 29, homeScore: 27, day: "Sun", hour: 13, spread: 2 },
+      { away: "CIN", home: "NE", awayScore: 16, homeScore: 10, day: "Sun", hour: 13, spread: 7.5 },
+      { away: "CLE", home: "DAL", awayScore: 17, homeScore: 33, day: "Sun", hour: 16, spread: -3 },
+      { away: "LV", home: "LAC", awayScore: 22, homeScore: 10, day: "Sun", hour: 16, spread: 3 },
+      { away: "DEN", home: "SEA", awayScore: 20, homeScore: 26, day: "Sun", hour: 16, spread: -5.5 },
+      { away: "WAS", home: "TB", awayScore: 20, homeScore: 37, day: "Sun", hour: 16, spread: -4 },
+      { away: "GB", home: "PHI", awayScore: 29, homeScore: 34, day: "Sun", hour: 16, spread: -1.5 },
+      { away: "LAR", home: "DET", awayScore: 20, homeScore: 26, day: "Sun", hour: 20, spread: -3.5 },
+      { away: "NYJ", home: "SF", awayScore: 13, homeScore: 32, day: "Mon", hour: 20, spread: null },
     ],
   },
   {
     weekNumber: 2,
     games: [
-      { away: "BUF", home: "MIA", awayScore: 31, homeScore: 10, day: "Thu", hour: 20 },
-      { away: "NO", home: "DAL", awayScore: 44, homeScore: 19, day: "Sun", hour: 13 },
-      { away: "TB", home: "DET", awayScore: 16, homeScore: 20, day: "Sun", hour: 13 },
-      { away: "IND", home: "GB", awayScore: 10, homeScore: 16, day: "Sun", hour: 13 },
-      { away: "SF", home: "MIN", awayScore: 17, homeScore: 23, day: "Sun", hour: 13 },
-      { away: "NYJ", home: "TEN", awayScore: 24, homeScore: 17, day: "Sun", hour: 13 },
-      { away: "SEA", home: "NE", awayScore: 23, homeScore: 20, day: "Sun", hour: 13 },
-      { away: "LAC", home: "CAR", awayScore: 26, homeScore: 3, day: "Sun", hour: 13 },
-      { away: "CLE", home: "JAX", awayScore: 18, homeScore: 13, day: "Sun", hour: 13 },
-      { away: "LAR", home: "ARI", awayScore: 41, homeScore: 10, day: "Sun", hour: 16 },
-      { away: "PIT", home: "DEN", awayScore: 6, homeScore: 13, day: "Sun", hour: 16 },
-      { away: "NYG", home: "WAS", awayScore: 18, homeScore: 21, day: "Sun", hour: 16 },
-      { away: "CIN", home: "KC", awayScore: 25, homeScore: 26, day: "Sun", hour: 16 },
-      { away: "BAL", home: "LV", awayScore: 23, homeScore: 26, day: "Sun", hour: 20 },
-      { away: "CHI", home: "HOU", awayScore: 19, homeScore: 13, day: "Sun", hour: 20 },
-      { away: "ATL", home: "PHI", awayScore: 22, homeScore: 21, day: "Mon", hour: 20 },
+      { away: "BUF", home: "MIA", awayScore: 31, homeScore: 10, day: "Thu", hour: 20, spread: 1.5 },
+      { away: "NO", home: "DAL", awayScore: 44, homeScore: 19, day: "Sun", hour: 13, spread: -3 },
+      { away: "TB", home: "DET", awayScore: 16, homeScore: 20, day: "Sun", hour: 13, spread: -2.5 },
+      { away: "IND", home: "GB", awayScore: 10, homeScore: 16, day: "Sun", hour: 13, spread: -6 },
+      { away: "SF", home: "MIN", awayScore: 17, homeScore: 23, day: "Sun", hour: 13, spread: -1.5 },
+      { away: "NYJ", home: "TEN", awayScore: 24, homeScore: 17, day: "Sun", hour: 13, spread: 3 },
+      { away: "SEA", home: "NE", awayScore: 23, homeScore: 20, day: "Sun", hour: 13, spread: 2.5 },
+      { away: "LAC", home: "CAR", awayScore: 26, homeScore: 3, day: "Sun", hour: 13, spread: 5.5 },
+      { away: "CLE", home: "JAX", awayScore: 18, homeScore: 13, day: "Sun", hour: 13, spread: 1.5 },
+      { away: "LAR", home: "ARI", awayScore: 41, homeScore: 10, day: "Sun", hour: 16, spread: 4 },
+      { away: "PIT", home: "DEN", awayScore: 6, homeScore: 13, day: "Sun", hour: 16, spread: -1.5 },
+      { away: "NYG", home: "WAS", awayScore: 18, homeScore: 21, day: "Sun", hour: 16, spread: -3 },
+      { away: "CIN", home: "KC", awayScore: 25, homeScore: 26, day: "Sun", hour: 16, spread: -6 },
+      { away: "BAL", home: "LV", awayScore: 23, homeScore: 26, day: "Sun", hour: 20, spread: -1 },
+      { away: "CHI", home: "HOU", awayScore: 19, homeScore: 13, day: "Sun", hour: 20, spread: null },
+      { away: "ATL", home: "PHI", awayScore: 22, homeScore: 21, day: "Mon", hour: 20, spread: -4.5 },
     ],
   },
   {
     weekNumber: 3,
     games: [
-      { away: "NYJ", home: "NE", awayScore: 3, homeScore: 3, day: "Thu", hour: 20 },
-      { away: "PHI", home: "NO", awayScore: 15, homeScore: 12, day: "Sun", hour: 13 },
-      { away: "DEN", home: "TB", awayScore: 7, homeScore: 26, day: "Sun", hour: 13 },
-      { away: "NYG", home: "CLE", awayScore: 21, homeScore: 15, day: "Sun", hour: 13 },
-      { away: "MIN", home: "HOU", awayScore: 7, homeScore: 30, day: "Sun", hour: 13 },
-      { away: "GB", home: "TEN", awayScore: 30, homeScore: 14, day: "Sun", hour: 13 },
-      { away: "CHI", home: "IND", awayScore: 16, homeScore: 21, day: "Sun", hour: 13 },
-      { away: "LAC", home: "PIT", awayScore: 10, homeScore: 20, day: "Sun", hour: 13 },
-      { away: "DAL", home: "BAL", awayScore: 25, homeScore: 28, day: "Sun", hour: 16 },
-      { away: "MIA", home: "SEA", awayScore: 3, homeScore: 24, day: "Sun", hour: 16 },
-      { away: "SF", home: "LAR", awayScore: 27, homeScore: 24, day: "Sun", hour: 16 },
-      { away: "CAR", home: "LV", awayScore: 22, homeScore: 36, day: "Sun", hour: 16 },
-      { away: "KC", home: "ATL", awayScore: 22, homeScore: 17, day: "Sun", hour: 20 },
-      { away: "DET", home: "ARI", awayScore: 20, homeScore: 13, day: "Sun", hour: 20 },
-      { away: "JAX", home: "BUF", awayScore: 10, homeScore: 47, day: "Mon", hour: 20 },
-      { away: "WAS", home: "CIN", awayScore: 38, homeScore: 33, day: "Mon", hour: 20 },
+      { away: "NYJ", home: "NE", awayScore: 3, homeScore: 3, day: "Thu", hour: 20, spread: -1.5 },
+      { away: "PHI", home: "NO", awayScore: 15, homeScore: 12, day: "Sun", hour: 13, spread: 1.5 },
+      { away: "DEN", home: "TB", awayScore: 7, homeScore: 26, day: "Sun", hour: 13, spread: -3.5 },
+      { away: "NYG", home: "CLE", awayScore: 21, homeScore: 15, day: "Sun", hour: 13, spread: 3 },
+      { away: "MIN", home: "HOU", awayScore: 7, homeScore: 30, day: "Sun", hour: 13, spread: -6 },
+      { away: "GB", home: "TEN", awayScore: 30, homeScore: 14, day: "Sun", hour: 13, spread: 7 },
+      { away: "CHI", home: "IND", awayScore: 16, homeScore: 21, day: "Sun", hour: 13, spread: -2.5 },
+      { away: "LAC", home: "PIT", awayScore: 10, homeScore: 20, day: "Sun", hour: 13, spread: -3 },
+      { away: "DAL", home: "BAL", awayScore: 25, homeScore: 28, day: "Sun", hour: 16, spread: 2.5 },
+      { away: "MIA", home: "SEA", awayScore: 3, homeScore: 24, day: "Sun", hour: 16, spread: -6.5 },
+      { away: "SF", home: "LAR", awayScore: 27, homeScore: 24, day: "Sun", hour: 16, spread: 2 },
+      { away: "CAR", home: "LV", awayScore: 22, homeScore: 36, day: "Sun", hour: 16, spread: null },
+      { away: "KC", home: "ATL", awayScore: 22, homeScore: 17, day: "Sun", hour: 20, spread: 3 },
+      { away: "DET", home: "ARI", awayScore: 20, homeScore: 13, day: "Sun", hour: 20, spread: 3.5 },
+      { away: "JAX", home: "BUF", awayScore: 10, homeScore: 47, day: "Mon", hour: 20, spread: -9 },
+      { away: "WAS", home: "CIN", awayScore: 38, homeScore: 33, day: "Mon", hour: 20, spread: -2.5 },
     ],
   },
 ];
@@ -86,22 +97,31 @@ const PLAYER_NAMES = [
   { username: "zeke99", displayName: "Zeke", realName: null, team: null },
 ];
 
-// Which teams each player picked for weeks 1-3 (some intentionally wrong)
+// Which teams each player picked for weeks 1-3. Deliberately mixed so the
+// leaderboard *and* the stats page (#121) have something to show: a heavy
+// consensus that busts in weeks 1 and 2, a tie, a lead change every week, and
+// a leader who takes a loss.
+//
+//   wk1  BAL is the consensus (4 picks) and loses to KC — jdog alone cashes
+//   wk2  PHI is the consensus (4 picks) and loses to ATL; lucky13 also busts on DAL
+//   wk3  HOU is a clean 2-player sweep, DAL a 2-player whiff that knocks both
+//        co-leaders (jdog, queenb) off the top and snaps their 2-game streaks;
+//        mike_t's NYJ pick lands on the NYJ/NE tie, so it grades PUSH
+//
+// Nobody repeats a team — the no-reuse rule is enforced at pick time, so a
+// duplicate here would silently drop a pick.
 const PLAYER_PICKS: Record<string, string[]> = {
-  jdog:     ["KC", "BUF", "BAL"],
-  mike_t:   ["NO", "NO", "PHI"],   // will fail week 2 since NO already used — we handle dedupe
-  sara_k:   ["SF", "LAC", "GB"],
-  bigben:   ["DAL", "WAS", "HOU"],
-  chadwick: ["PHI", "DEN", "TB"],
-  tommy_b:  ["DET", "SEA", "SF"],
-  lucky13:  ["TB", "ATL", "KC"],
-  ace_v:    ["KC", "BUF", "DET"],
-  queenb:   ["MIN", "KC", "BUF"],
-  zeke99:   ["BUF", "CLE", "PIT"],
+  jdog:     ["KC",  "BUF", "DAL"],
+  mike_t:   ["BAL", "DET", "NYJ"],
+  sara_k:   ["BAL", "PHI", "HOU"],
+  bigben:   ["BAL", "PHI", "HOU"],
+  chadwick: ["BAL", "SEA", "PIT"],
+  tommy_b:  ["SF",  "PHI", "KC"],
+  lucky13:  ["TB",  "DAL", "BUF"],
+  ace_v:    ["NO",  "GB",  "SEA"],
+  queenb:   ["MIN", "LAC", "DAL"],
+  zeke99:   ["DET", "PHI", "TB"],
 };
-
-// Fix dedupe: mike_t can't pick NO twice, give them LAR for week 2
-PLAYER_PICKS["mike_t"] = ["NO", "LAR", "PHI"];
 
 function getWeekDate(weekNum: number, dayOfWeek: string, hour: number): Date {
   // Season starts Sept 2025
@@ -132,6 +152,7 @@ async function main() {
   await prisma.pick.deleteMany();
   await prisma.game.deleteMany();
   await prisma.week.deleteMany();
+  await prisma.teamMembership.deleteMany();
   await prisma.season.deleteMany();
   await prisma.user.deleteMany({ where: { role: "PLAYER" } });
   await prisma.team.deleteMany();
@@ -181,7 +202,6 @@ async function main() {
         realName: p.realName ?? null,
         role: "PLAYER",
         inviteCodeUsed: invite.code,
-        teamId: p.team ? teamMap.get(p.team) ?? null : null,
       },
     });
     players.set(p.username, user.id);
@@ -192,6 +212,16 @@ async function main() {
   // Create season
   const season = await prisma.season.create({
     data: { year: 2025, isActive: true },
+  });
+
+  // Season-scoped roster memberships (#120): assign each player to their team
+  // for this season.
+  await prisma.teamMembership.createMany({
+    data: PLAYER_NAMES.filter((p) => p.team).map((p) => ({
+      userId: players.get(p.username)!,
+      seasonId: season.id,
+      teamId: teamMap.get(p.team!)!,
+    })),
   });
 
   // Create all 22 weeks
@@ -247,6 +277,7 @@ async function main() {
           awayScore: game.awayScore,
           status: "FINAL",
           kickoff: getWeekDate(weekData.weekNumber, game.day, game.hour),
+          spreadHome: game.spread,
         },
       });
     }

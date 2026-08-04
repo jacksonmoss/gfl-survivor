@@ -92,7 +92,7 @@ async function main(): Promise<void> {
 
   for (const weekNumber of WEEK_NUMBERS) {
     const isPlayoff = weekNumber >= 19;
-    const { seasonType, espnWeek } = getESPNWeekParams(weekNumber, isPlayoff);
+    const { seasonType, espnWeek } = getESPNWeekParams(weekNumber, isPlayoff, 19);
     const data = await fetchScoreboard(YEAR, seasonType, espnWeek);
     const file = join(FIXTURE_DIR, `${YEAR}-${seasonType}-${espnWeek}.json`);
     writeFileSync(file, JSON.stringify(data, null, 2) + "\n");

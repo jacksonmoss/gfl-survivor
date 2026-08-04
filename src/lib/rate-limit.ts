@@ -24,7 +24,50 @@ export const AUTH_RATE_LIMITS = {
   forgotPassword: { max: 5, windowMs: 15 * 60_000 },
   resetPassword: { max: 10, windowMs: 60 * 60_000 },
   login: { max: 10, windowMs: 15 * 60_000 },
+  // Registration (#134). Loose enough that a league signing up together off one
+  // shared invite link — even from behind a single NAT — doesn't lock itself
+  // out, tight enough that a leaked link can't be scripted into a flood.
+  register: { max: 10, windowMs: 15 * 60_000 },
 } satisfies Record<string, RateLimitConfig>;
+
+export interface ProxyRateLimitRule {
+  /** Exact pathname this rule guards. */
+  path: string;
+  /** Bucket-key prefix, so each endpoint gets its own window per IP. */
+  prefix: string;
+  config: RateLimitConfig;
+}
+
+// Endpoints the proxy limits (src/proxy.ts). Login is deliberately absent: the
+// proxy can't see the auth result, so it can't count *failed* logins only —
+// that lives in the `authorize` callback (src/lib/auth.ts, issue #46).
+export const PROXY_RATE_LIMIT_RULES: ProxyRateLimitRule[] = [
+  {
+    path: "/api/auth/forgot-password",
+    prefix: "forgot-password",
+    config: AUTH_RATE_LIMITS.forgotPassword,
+  },
+  {
+    path: "/api/auth/reset-password",
+    prefix: "reset-password",
+    config: AUTH_RATE_LIMITS.resetPassword,
+  },
+  {
+    path: "/api/auth/register",
+    prefix: "register",
+    config: AUTH_RATE_LIMITS.register,
+  },
+];
+
+// Which rule (if any) applies to a request. Only submissions are limited —
+// NextAuth also GETs some of these paths, and a GET costs nothing to serve.
+export function findProxyRateLimitRule(
+  method: string,
+  pathname: string
+): ProxyRateLimitRule | null {
+  if (method !== "POST") return null;
+  return PROXY_RATE_LIMIT_RULES.find((r) => r.path === pathname) ?? null;
+}
 
 interface Bucket {
   count: number;

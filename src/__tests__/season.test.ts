@@ -34,4 +34,18 @@ describe("buildSeasonWeeks", () => {
     expect(weeks[20].pickDeadline).toEqual(new Date(`${year + 1}-01-01`)); // Conf Championship
     expect(weeks[21].pickDeadline).toEqual(new Date(`${year + 1}-02-01`)); // Super Bowl
   });
+
+  it("parameterizes the regular-season length, appending the 4 playoff rounds after it", () => {
+    // A 19-game regular season → 23 weeks, playoffs at 20-23.
+    const bigger = buildSeasonWeeks(year, 19);
+    expect(bigger).toHaveLength(23);
+    expect(bigger.map((w) => w.weekNumber)).toEqual(
+      Array.from({ length: 23 }, (_, i) => i + 1),
+    );
+    // Week 19 is now the last regular week, not a playoff.
+    expect(bigger[18]).toMatchObject({ weekNumber: 19, isPlayoff: false, pointValue: 1 });
+    // Playoffs follow, still escalating 2/3/4/5 with the same labels.
+    expect(bigger[19]).toMatchObject({ weekNumber: 20, label: "Wild Card", isPlayoff: true, pointValue: 2 });
+    expect(bigger[22]).toMatchObject({ weekNumber: 23, label: "Super Bowl", isPlayoff: true, pointValue: 5 });
+  });
 });

@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { authInput, authButton } from "@/lib/ui";
+import { NAME_FIELD_LIMITS } from "@/lib/register";
 
 function RegisterForm() {
   const router = useRouter();
@@ -84,6 +85,7 @@ function RegisterForm() {
             id="firstName"
             name="firstName"
             type="text"
+            maxLength={NAME_FIELD_LIMITS.firstName}
             autoComplete="given-name"
             className={authInput}
           />
@@ -96,6 +98,7 @@ function RegisterForm() {
             id="lastName"
             name="lastName"
             type="text"
+            maxLength={NAME_FIELD_LIMITS.lastName}
             autoComplete="family-name"
             className={authInput}
           />
@@ -111,6 +114,7 @@ function RegisterForm() {
           name="username"
           type="text"
           required
+          maxLength={NAME_FIELD_LIMITS.username}
           autoComplete="username"
           className={authInput}
         />

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { buildTeamStandings } from "@/lib/rosters";
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -32,9 +33,16 @@ export async function GET(req: NextRequest) {
         where: { week: { seasonId: season.id } },
         include: { week: { include: { games: true } } },
       },
-      team: true,
     },
   });
+
+  // Roster membership is season-scoped (#120): group the trophy by *this*
+  // season's memberships, so viewing a past season shows the roster it had.
+  const memberships = await prisma.teamMembership.findMany({
+    where: { seasonId: season.id },
+    select: { userId: true, team: { select: { name: true } } },
+  });
+  const teamNameByUserId = new Map(memberships.map((m) => [m.userId, m.team.name]));
 
   const now = new Date();
 
@@ -60,7 +68,7 @@ export async function GET(req: NextRequest) {
       displayName: u.displayName,
       realName: u.realName ?? null,
       username: u.username,
-      teamName: u.team?.name ?? null,
+      teamName: teamNameByUserId.get(u.id) ?? null,
       points,
       wins,
       losses,
@@ -78,34 +86,8 @@ export async function GET(req: NextRequest) {
 
   players.sort((a, b) => b.points - a.points);
 
-  // Team trophy standings
-  const teamMap = new Map<string, { name: string; players: typeof players }>();
-  for (const p of players) {
-    if (p.teamName) {
-      if (!teamMap.has(p.teamName)) {
-        teamMap.set(p.teamName, { name: p.teamName, players: [] });
-      }
-      teamMap.get(p.teamName)!.players.push(p);
-    }
-  }
-
-  const teams = Array.from(teamMap.values())
-    .map((t) => {
-      const totalWinPct =
-        t.players.reduce((sum, p) => sum + p.winPct, 0) / t.players.length;
-      return {
-        name: t.name,
-        playerCount: t.players.length,
-        avgWinPct: totalWinPct,
-        totalPoints: t.players.reduce((sum, p) => sum + p.points, 0),
-        players: t.players.map((p) => ({
-          displayName: p.displayName,
-          points: p.points,
-          winPct: p.winPct,
-        })),
-      };
-    })
-    .sort((a, b) => b.avgWinPct - a.avgWinPct);
+  // Team trophy standings — grouped by this season's roster memberships.
+  const teams = buildTeamStandings(players, teamNameByUserId);
 
   return NextResponse.json({
     players,

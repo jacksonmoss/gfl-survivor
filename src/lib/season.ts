@@ -11,25 +11,32 @@ export type SeasonWeek = {
 };
 
 /**
- * Build the 22 week definitions for a season:
- * - weeks 1-18: regular season, 1 point, deadline placeholder (${year}-09-01, admin updates)
- * - weeks 19-22: playoffs — Wild Card (2), Divisional (3), Conference Championship (4),
+ * Build the week definitions for a season:
+ * - regular season (weeks 1..`regularWeeks`): 1 point, deadline placeholder (${year}-09-01, admin updates)
+ * - 4 playoff rounds follow: Wild Card (2), Divisional (3), Conference Championship (4),
  *   Super Bowl (5). Playoff deadlines fall in the following calendar year.
+ *
+ * @param regularWeeks number of regular-season weeks (default 18). Playoff week
+ *   numbers are relative to this, so a longer/shorter regular season is a config
+ *   value, not a code edit.
  */
-export function buildSeasonWeeks(year: number): SeasonWeek[] {
+export function buildSeasonWeeks(year: number, regularWeeks = 18): SeasonWeek[] {
+  const playoffs: Omit<SeasonWeek, "weekNumber">[] = [
+    { label: "Wild Card", isPlayoff: true, pointValue: 2, pickDeadline: new Date(`${year + 1}-01-01`) },
+    { label: "Divisional", isPlayoff: true, pointValue: 3, pickDeadline: new Date(`${year + 1}-01-01`) },
+    { label: "Conference Championship", isPlayoff: true, pointValue: 4, pickDeadline: new Date(`${year + 1}-01-01`) },
+    { label: "Super Bowl", isPlayoff: true, pointValue: 5, pickDeadline: new Date(`${year + 1}-02-01`) },
+  ];
   return [
-    // Regular season weeks 1-18
-    ...Array.from({ length: 18 }, (_, i) => ({
+    // Regular season
+    ...Array.from({ length: regularWeeks }, (_, i) => ({
       weekNumber: i + 1,
       label: `Week ${i + 1}`,
       isPlayoff: false,
       pointValue: 1,
       pickDeadline: new Date(`${year}-09-01`), // placeholder, admin updates
     })),
-    // Playoff rounds
-    { weekNumber: 19, label: "Wild Card", isPlayoff: true, pointValue: 2, pickDeadline: new Date(`${year + 1}-01-01`) },
-    { weekNumber: 20, label: "Divisional", isPlayoff: true, pointValue: 3, pickDeadline: new Date(`${year + 1}-01-01`) },
-    { weekNumber: 21, label: "Conference Championship", isPlayoff: true, pointValue: 4, pickDeadline: new Date(`${year + 1}-01-01`) },
-    { weekNumber: 22, label: "Super Bowl", isPlayoff: true, pointValue: 5, pickDeadline: new Date(`${year + 1}-02-01`) },
+    // Playoff rounds, numbered continuing from the regular season
+    ...playoffs.map((p, i) => ({ ...p, weekNumber: regularWeeks + 1 + i })),
   ];
 }

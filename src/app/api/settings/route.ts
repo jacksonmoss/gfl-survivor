@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { deriveSettingsProfile, splitRealName, validateNameFields } from "@/lib/register";
 import bcrypt from "bcryptjs";
+
+const asText = (value: unknown) => (typeof value === "string" ? value : "");
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -14,27 +17,42 @@ export async function GET() {
   });
 
   if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
-  return NextResponse.json(user);
+  // The form edits first/last name like signup does (#126); realName is one
+  // column, so split it back apart here rather than storing the halves.
+  return NextResponse.json({ ...user, ...splitRealName(user.realName) });
 }
 
 export async function PATCH(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { displayName, realName, email, emailReminders, currentPassword, newPassword } = await req.json();
+  const { displayName, firstName, lastName, email, emailReminders, currentPassword, newPassword } =
+    await req.json();
 
   const updates: Record<string, string | boolean | null> = {};
 
-  if (displayName) {
-    updates.displayName = displayName;
+  // The profile form always posts all three name fields together; the password
+  // form posts none of them, so leave the names alone unless one is present.
+  if (displayName !== undefined || firstName !== undefined || lastName !== undefined) {
+    // Same caps as signup (#137). Username isn't editable here (see "Username
+    // is permanent" in AGENTS.md), so only the three name fields are checked.
+    const lengths = validateNameFields({ displayName, firstName, lastName });
+    if (!lengths.ok) {
+      return NextResponse.json({ error: lengths.error }, { status: 400 });
+    }
+
+    const names = deriveSettingsProfile({
+      firstName: asText(firstName),
+      lastName: asText(lastName),
+      displayName: asText(displayName),
+      username: session.user.username,
+    });
+    updates.displayName = names.displayName;
+    updates.realName = names.realName;
   }
 
   if (emailReminders !== undefined) {
     updates.emailReminders = Boolean(emailReminders);
-  }
-
-  if (realName !== undefined) {
-    updates.realName = typeof realName === "string" && realName.trim() !== "" ? realName.trim() : null;
   }
 
   if (email !== undefined) {

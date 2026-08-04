@@ -28,7 +28,7 @@ function loadFixture(seasonType: number, espnWeek: number): ESPNResponse {
 const ALL_WEEKS = Array.from({ length: 22 }, (_, i) => i + 1).map((weekNumber) => ({
   weekNumber,
   isPlayoff: weekNumber >= 19,
-  ...getESPNWeekParams(weekNumber, weekNumber >= 19),
+  ...getESPNWeekParams(weekNumber, weekNumber >= 19, 19),
 }));
 
 /** Build SCHEDULED (0-0) DB games for every event so a FINAL fixture grades. */
@@ -62,11 +62,11 @@ describe("ESPN fixture replay (2024 full season)", () => {
     // Week 18 is the last regular week (seasonType 2); week 19 flips to the
     // playoffs (seasonType 3, espnWeek 1) and week 22 jumps to espnWeek 5 —
     // ESPN's Pro-Bowl-skips-4 quirk. These are the breaks most likely to bite.
-    expect(getESPNWeekParams(18, false)).toEqual({ seasonType: 2, espnWeek: 18 });
-    expect(getESPNWeekParams(19, true)).toEqual({ seasonType: 3, espnWeek: 1 });
-    expect(getESPNWeekParams(20, true)).toEqual({ seasonType: 3, espnWeek: 2 });
-    expect(getESPNWeekParams(21, true)).toEqual({ seasonType: 3, espnWeek: 3 });
-    expect(getESPNWeekParams(22, true)).toEqual({ seasonType: 3, espnWeek: 5 });
+    expect(getESPNWeekParams(18, false, 19)).toEqual({ seasonType: 2, espnWeek: 18 });
+    expect(getESPNWeekParams(19, true, 19)).toEqual({ seasonType: 3, espnWeek: 1 });
+    expect(getESPNWeekParams(20, true, 19)).toEqual({ seasonType: 3, espnWeek: 2 });
+    expect(getESPNWeekParams(21, true, 19)).toEqual({ seasonType: 3, espnWeek: 3 });
+    expect(getESPNWeekParams(22, true, 19)).toEqual({ seasonType: 3, espnWeek: 5 });
 
     // The playoff fixtures shrink each round (6→4→2→1), confirming the mapped
     // files are the right rounds, not just parseable.
@@ -135,16 +135,10 @@ describe("ESPN fixture replay (2024 full season)", () => {
     expect(update.losingTeam).toBe("KC");
   });
 
-  it("pins the tie behavior: the AWAY team is recorded as the winner (known TODO)", () => {
-    // The NFL regular season can tie. No 2024 fixture ties, so pin the current
-    // behavior with a synthetic FINAL event to lock it against silent drift.
-    //
-    // NOTE: the grader uses `homeScore > awayScore ? home : away` — a *strict*
-    // comparison, so on an equal score the tie falls to the away branch and the
-    // AWAY team is graded the winner. This contradicts the "picks the home team"
-    // wording in AGENTS.md's Tie-handling TODO; the code, pinned here, is the
-    // source of truth. Tie handling is still an open TODO — this test documents
-    // what actually happens today rather than what the doc claimed.
+  it("grades a level game as a tie: no winner, no loser, isTie set (#113)", () => {
+    // The NFL regular season can tie. No 2024 fixture ties, so exercise the tie
+    // path with a synthetic FINAL event. On an equal score the grader records
+    // neither team as the winner (isTie) and the route grades both picks PUSH.
     const tie: ESPNEvent = {
       id: "tie-1",
       competitions: [
@@ -166,8 +160,10 @@ describe("ESPN fixture replay (2024 full season)", () => {
       awayScore: 0,
       status: "SCHEDULED",
     });
-    // Away (WSH→WAS) is graded the winner on a tie; home (NYG) is the loser.
-    expect(update?.winnerTeam).toBe("WAS");
-    expect(update?.losingTeam).toBe("NYG");
+    // A tie has no winner or loser; isTie flags the push for the sync route.
+    expect(update?.justFinished).toBe(true);
+    expect(update?.isTie).toBe(true);
+    expect(update?.winnerTeam).toBeNull();
+    expect(update?.losingTeam).toBeNull();
   });
 });

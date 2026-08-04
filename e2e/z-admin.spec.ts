@@ -71,6 +71,44 @@ test.describe("Admin panel", () => {
     await expect(rosterCard(original)).toHaveCount(0);
   });
 
+  test("rosters lock after kickoff; admin override assigns a player, trophy reflects it", async ({ page }) => {
+    await loginAs(page, ADMIN.username, ADMIN.password);
+    await page.goto("/admin");
+    await page.getByRole("button", { name: "Teams" }).click();
+
+    // The seeded 2025 season already has a game in the past, so its rosters are
+    // locked (season-scoped rosters, #120).
+    await expect(page.getByText("Rosters are locked")).toBeVisible();
+
+    const teamName = `E2E Roster ${Date.now()}`;
+    await page.getByPlaceholder("Team name").fill(teamName);
+    await page.getByRole("button", { name: "Create", exact: true }).click();
+
+    const rosterCard = (name: string) =>
+      page
+        .locator("div.rounded-xl")
+        .filter({ has: page.getByRole("button", { name: "Rename" }) })
+        .filter({ hasText: name });
+    await expect(rosterCard(teamName)).toBeVisible();
+
+    // Editing is blocked until the admin overrides the lock, then assign Player One.
+    await page.getByLabel("Override lock and edit anyway").check();
+    const assignCard = page
+      .locator("div.rounded-xl")
+      .filter({ hasText: "Assign Player to Team" });
+    await assignCard.getByRole("combobox").first().selectOption({ label: "Player One" });
+    await assignCard.getByRole("combobox").nth(1).selectOption({ label: teamName });
+    await assignCard.getByRole("button", { name: "Assign" }).click();
+
+    // The player now shows on the team's roster card for this season.
+    await expect(rosterCard(teamName).getByText("Player One")).toBeVisible();
+
+    // And the Team Trophy tab shows the team (player1 has a graded week-1 win).
+    await page.goto("/leaderboard");
+    await page.getByRole("tab", { name: "Team Trophy" }).click();
+    await expect(page.getByText(teamName)).toBeVisible();
+  });
+
   test("admin can create a new season", async ({ page }) => {
     await loginAs(page, ADMIN.username, ADMIN.password);
     await page.goto("/admin");

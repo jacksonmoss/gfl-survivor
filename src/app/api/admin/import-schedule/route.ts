@@ -31,7 +31,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Week not found" }, { status: 404 });
   }
 
-  const { seasonType, espnWeek } = getESPNWeekParams(weekNumber, week.isPlayoff);
+  // The first playoff week anchors the ESPN playoff-round mapping, so the
+  // regular season can change length without touching playoff logic.
+  const firstPlayoff = await prisma.week.findFirst({
+    where: { seasonId, isPlayoff: true },
+    orderBy: { weekNumber: "asc" },
+    select: { weekNumber: true },
+  });
+  const { seasonType, espnWeek } = getESPNWeekParams(
+    weekNumber,
+    week.isPlayoff,
+    firstPlayoff?.weekNumber ?? weekNumber
+  );
   const url = buildESPNUrl(week.season.year, seasonType, espnWeek);
 
   const res = await fetch(url);
