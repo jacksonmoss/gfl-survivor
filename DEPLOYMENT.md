@@ -271,3 +271,10 @@ response breaks each slot down into `sent` / `skipped` / `failed` counts.
   ~6h stale in nginx; switch to a certbot `--deploy-hook`. (#80)
 - **TLS cert covers only the single `DOMAIN`** — no apex+`www` SAN or canonical
   redirect. (#81)
+- **Nothing exercises this stack in CI** — the images, migrations, and seed path
+  are only ever validated by hand. Two install-breaking bugs (the migrator
+  couldn't run the seed scripts; `ODDS_API_KEY` was never forwarded to the app)
+  shipped undetected because `pnpm test` doesn't touch the Dockerfile or the
+  compose files. (#157)
+- **The shell scripts here aren't linted** — no shellcheck over `deploy/*.sh` or
+  `scripts/*.sh`. (#158)
