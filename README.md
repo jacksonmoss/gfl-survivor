@@ -48,6 +48,15 @@ npx prisma migrate dev --name <name>   # Create a new migration
 npx prisma migrate deploy              # Apply pending migrations (production)
 ```
 
+## Deploying
+
+- **[`docs/SEASON-LAUNCH.md`](docs/SEASON-LAUNCH.md)** — runbook for standing up a
+  new install and opening a league for a season. Split by who does what: server
+  install (technical) vs. running the league from the Admin panel (plain
+  English, no terminal).
+- **[`DEPLOYMENT.md`](DEPLOYMENT.md)** — engineering reference for the same
+  stack: container layout, TLS internals, backup/restore, reminders cron.
+
 ## Stack
 
 | Layer | Technology |
