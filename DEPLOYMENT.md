@@ -4,6 +4,11 @@ Production runs the app as a self-contained Next.js standalone server in Docker,
 behind an nginx reverse proxy, with Postgres in a sibling container. Database
 migrations are applied by a one-shot `migrate` service before the app starts.
 
+> This page is the engineering reference — how the pieces fit and why. For a
+> step-by-step runbook for standing up a **new install for a season** (including
+> the non-technical, Admin-panel half a league operator handles), see
+> **[`docs/SEASON-LAUNCH.md`](docs/SEASON-LAUNCH.md)**.
+
 ## Prerequisites
 
 - Docker Engine with the Compose plugin (`docker compose`)
