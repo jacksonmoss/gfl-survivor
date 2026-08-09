@@ -105,6 +105,18 @@ export function parseWeatherResponse(
   };
 }
 
+/**
+ * Whether a game should still show pre-game context (forecast, dome badge,
+ * betting spread). All of it describes conditions *before* kickoff, so it stops
+ * being useful the moment the game is final — a cached forecast then reads as
+ * a stale "current" one, and the dome badge is answering a question nobody is
+ * asking anymore. Anything that isn't FINAL (SCHEDULED, LIVE, and any status
+ * ESPN adds later) keeps showing it.
+ */
+export function showsPregameContext(status: string): boolean {
+  return status !== "FINAL";
+}
+
 /** Decide whether a game needs a (re)fetch given its cached forecast. */
 export function shouldFetchWeather(
   game: { indoor: boolean; status: string; kickoff: Date },

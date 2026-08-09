@@ -48,7 +48,7 @@ src/
     ├── reminders.ts                 # pure reminder scheduling: slot computation, due window, email body (tested)
     ├── espn.ts                     # ESPN API helpers: team abbr mapping, URL builder, response types
     ├── stadiums.ts                 # 32 NFL stadiums: lat/lon + indoor flag (dome/retractable) — for weather (tested)
-    ├── weather.ts                  # pure Open-Meteo helpers: URL builder, forecast parse, cache staleness, display format (tested)
+    ├── weather.ts                  # pure Open-Meteo helpers: URL builder, forecast parse, cache staleness, pre-game display gate, display format (tested)
     ├── odds.ts                     # pure The-Odds-API helpers: URL builder, spread parse/median, refresh gate, display format (tested)
     ├── odds-sync.ts                # server-side bulk-odds fetch + persist to Game.spreadHome (imports prisma; wired into sync + import-schedule)
     ├── types.ts                    # NextAuth session/JWT type augmentation
@@ -111,7 +111,7 @@ src/__tests__/
 ├── password-reset.test.ts  # Reset token gen/hash/expiry, temp password generation
 ├── reminders.test.ts       # Reminder slots (Thu/Sun/playoff), timezone weekday, due window, recipient filter
 ├── stadiums.test.ts        # Stadium table integrity, exact indoor set (SEA outdoor regression) — src/lib/stadiums.ts
-├── weather.test.ts         # Open-Meteo URL/parse, cache staleness, compass/icon/format — src/lib/weather.ts
+├── weather.test.ts         # Open-Meteo URL/parse, cache staleness, pre-game gate (hidden at FINAL, #151), compass/icon/format — src/lib/weather.ts
 ├── odds.test.ts            # Odds-API URL/parse, median spread, refresh gate, spread display format — src/lib/odds.ts
 ├── teams.test.ts           # Team name validation (trim, blank, collision, self-rename) — src/lib/teams.ts
 ├── rosters.test.ts         # Season-scoped rosters: lock, rollover (skip deleted team/user), trophy grouping incl. cross-season + teamless — src/lib/rosters.ts (#120)
