@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import Image from "next/image";
 import { getTeamName, getLogoUrl } from "@/lib/nfl-teams";
 import { isIndoorStadium } from "@/lib/stadiums";
-import { formatWeather, weatherIcon } from "@/lib/weather";
+import { formatWeather, weatherIcon, showsPregameContext } from "@/lib/weather";
 import type { GameWeather } from "@/lib/weather";
 import { formatSpread } from "@/lib/odds";
 import { formatKickoff } from "@/lib/datetime";
@@ -265,12 +265,13 @@ export default function PicksPage() {
               <div className="grid gap-2 sm:grid-cols-2">
                 {selectedWeek.games.map((game) => {
                   const gameLocked = new Date() >= new Date(game.kickoff);
-                  const indoor = isIndoorStadium(game.homeTeam);
-                  // Hide the forecast once the game is final — the cached
-                  // forecast is pre-game and would read as stale/current.
-                  const weather = game.status === "FINAL" ? null : game.weatherJson;
-                  // Spread is pre-game context — hide it once the game is final.
-                  const spreadHome = game.status === "FINAL" ? null : game.spreadHome;
+                  // Forecast, dome badge and spread are all pre-game context —
+                  // they describe conditions before kickoff, so they all drop
+                  // away together once the game is final.
+                  const pregame = showsPregameContext(game.status);
+                  const indoor = pregame && isIndoorStadium(game.homeTeam);
+                  const weather = pregame ? game.weatherJson : null;
+                  const spreadHome = pregame ? game.spreadHome : null;
                   const awayPicked = currentPick?.team === game.awayTeam;
                   const homePicked = currentPick?.team === game.homeTeam;
                   const awayUsed = usedTeams.includes(game.awayTeam) && !awayPicked;

@@ -3,6 +3,7 @@ import {
   buildOpenMeteoUrl,
   parseWeatherResponse,
   shouldFetchWeather,
+  showsPregameContext,
   degToCompass,
   weatherIcon,
   formatWeather,
@@ -106,6 +107,27 @@ describe("parseWeatherResponse", () => {
     expect(w.precip_chance).toBe(0);
     expect(w.wind_dir).toBe("");
     expect(w.code).toBe(0);
+  });
+});
+
+describe("showsPregameContext", () => {
+  it("shows forecast/dome/spread before kickoff", () => {
+    expect(showsPregameContext("SCHEDULED")).toBe(true);
+  });
+
+  it("keeps showing them while the game is live", () => {
+    expect(showsPregameContext("LIVE")).toBe(true);
+  });
+
+  it("hides them once the game is final", () => {
+    expect(showsPregameContext("FINAL")).toBe(false);
+  });
+
+  it("shows them for an unrecognized status rather than hiding by accident", () => {
+    // Only FINAL suppresses; a status ESPN adds later (POSTPONED, DELAYED, …)
+    // still gets pre-game context instead of silently losing it.
+    expect(showsPregameContext("POSTPONED")).toBe(true);
+    expect(showsPregameContext("")).toBe(true);
   });
 });
 
