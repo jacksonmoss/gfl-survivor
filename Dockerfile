@@ -40,6 +40,14 @@ ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc tsconfig.json prisma.config.ts ./
 COPY prisma ./prisma
+# The seed scripts (`pnpm seed`, `pnpm seed:demo`) import the generated client
+# from `../src/generated/prisma/client`, which is gitignored and therefore never
+# in the build context. Generate it here so this image can seed as well as
+# migrate — DEPLOYMENT.md and docs/SEASON-LAUNCH.md both document
+# `run --rm migrate pnpm seed` as the way to create the first admin user.
+# Generated in-stage rather than copied from `builder` so the migrator stays
+# independent of the (much slower) Next.js build.
+RUN pnpm prisma generate
 CMD ["pnpm", "prisma", "migrate", "deploy"]
 
 # ── Runner ────────────────────────────────────────────────────────────────────

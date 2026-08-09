@@ -8,6 +8,12 @@ migrations are applied by a one-shot `migrate` service before the app starts.
 > step-by-step runbook for standing up a **new install for a season** (including
 > the non-technical, Admin-panel half a league operator handles), see
 > **[`docs/SEASON-LAUNCH.md`](docs/SEASON-LAUNCH.md)**.
+>
+> To run this same app image **locally for a customer beta** — no domain, no
+> TLS setup, a public HTTPS URL from a Cloudflare quick tunnel — use
+> `docker-compose.beta.yml` and **[`docs/BETA-TESTING.md`](docs/BETA-TESTING.md)**
+> instead. That stack drops nginx, certbot, and the backup sidecar; it is for
+> demos and requirements sign-off, not for running a season.
 
 ## Prerequisites
 
@@ -88,6 +94,12 @@ Notes:
 - The **runner needs no Prisma engine** — the app talks to Postgres via the
   `@prisma/adapter-pg` driver adapter (pure JS).
 - The runner runs as the unprivileged `node` user.
+- The **migrator runs `prisma generate`** at build time. The seed scripts import
+  the generated client from `../src/generated/prisma/client`, which is gitignored
+  and so never present in the build context — without this step `run --rm migrate
+  pnpm seed` fails with `MODULE_NOT_FOUND` and a fresh install can't create its
+  first admin user. It's generated in-stage rather than copied from `builder` so
+  the migrator stays independent of the much slower Next.js build.
 
 ## TLS
 

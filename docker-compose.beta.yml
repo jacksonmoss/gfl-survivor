@@ -1,0 +1,117 @@
+# Beta stack: the real production app image, runnable locally with no domain.
+#
+# Same `runner` image as docker-compose.prod.yml, minus everything that needs a
+# public domain (nginx, certbot) or a long-lived host (backup). What's left is
+# db + one-shot migrator + app, with the app port published on the host, plus an
+# opt-in cloudflared quick tunnel that gives the whole thing a public HTTPS URL.
+#
+# Drive it with scripts/beta.sh — the tunnel hostname is random and only known
+# after cloudflared starts, but NEXTAUTH_URL has to match it before the app
+# boots, so startup is two-phase. See docs/BETA-TESTING.md.
+#
+#   ./scripts/beta.sh up            # tunnel + app, prints the public URL
+#   ./scripts/beta.sh up --lan      # no tunnel, LAN only
+#
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-gfl}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gfl_beta_password}
+      POSTGRES_DB: ${POSTGRES_DB:-gfl}
+    # Bound to loopback: handy for `psql` while demoing, never on the LAN.
+    # Port differs from the dev stack's 5433 so both can run at once.
+    ports:
+      - "127.0.0.1:${DB_PORT:-5434}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gfl} -d ${POSTGRES_DB:-gfl}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Applies pending migrations, then exits. The app waits for it to succeed.
+  # Also carries the full toolchain + generated Prisma client, so beta.sh runs
+  # the seed and reset scripts through this same service.
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migrator
+    image: gfl-survivor-migrate:beta
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    image: gfl-survivor-app:beta
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+      # Must equal the origin testers actually type. With the tunnel on, that's
+      # the https://…trycloudflare.com URL, which beta.sh resolves at startup
+      # and writes to .env.beta.runtime. A mismatch here is the classic
+      # "login succeeds then bounces straight back to /login" failure.
+      NEXTAUTH_URL: ${NEXTAUTH_URL:?set NEXTAUTH_URL (scripts/beta.sh sets this)}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?set NEXTAUTH_SECRET (scripts/beta.sh generates one)}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_SECURE: ${SMTP_SECURE:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      CRON_SECRET: ${CRON_SECRET:-}
+      REMINDER_LEAD_HOURS: ${REMINDER_LEAD_HOURS:-}
+      # Betting spreads on matchup cards. Unset = cards omit the spread.
+      ODDS_API_KEY: ${ODDS_API_KEY:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    # Published directly (no nginx in this stack). 0.0.0.0 so the same run is
+    # reachable over the LAN as well as through the tunnel.
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    # The runner image is Node-only (no curl), so probe with node's fetch.
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Opt-in (profile `tunnel`): a Cloudflare *quick* tunnel. Outbound-only, so it
+  # needs no domain, no port forwarding, and no Cloudflare account — it just
+  # prints a random https://<words>.trycloudflare.com hostname on startup.
+  #
+  # Deliberately has NO depends_on: the tunnel must be up first so beta.sh can
+  # read the URL out of its log and boot the app with a matching NEXTAUTH_URL.
+  # It harmlessly 502s for the few seconds before the app is listening.
+  #
+  # Quick tunnels are ephemeral — the hostname changes on every restart, and
+  # Cloudflare offers no uptime guarantee for them. That is fine for a beta
+  # session and NOT fine for the real season; production is docker-compose.prod.yml.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --url http://app:3000
+    # A quick tunnel exposes this instance to anyone with the URL. Registration
+    # is invite-gated, but treat the URL as public — see docs/BETA-TESTING.md.
+
+volumes:
+  # Distinct from the dev stack's `gfl_pgdata` and prod's `gfl-prod_pgdata`
+  # because the compose project name is pinned to `gfl-beta` (.env.beta.example).
+  # Without that pin all three stacks default their project name to the
+  # directory and share one volume — see the warning in DEPLOYMENT.md.
+  pgdata:

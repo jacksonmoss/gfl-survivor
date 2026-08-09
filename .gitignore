@@ -37,6 +37,7 @@ yarn-error.log*
 .env.*
 !.env.example
 !.env.prod.example
+!.env.beta.example
 
 # database backups (deploy/backup.sh writes here)
 /backups/
