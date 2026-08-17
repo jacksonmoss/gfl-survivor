@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { buildSeasonWeeks } from "@/lib/season";
+import { buildSeasonWeeks, validateSeasonYear } from "@/lib/season";
 import { computeRolloverMemberships } from "@/lib/rosters";
 
 async function requireAdmin() {
@@ -34,20 +34,30 @@ export async function POST(req: NextRequest) {
 
   const { year } = await req.json();
 
-  // Deactivate other seasons
-  await prisma.season.updateMany({
-    data: { isActive: false },
-  });
+  // Validate before touching anything. The deactivate below is a blanket write,
+  // so a create that fails afterwards (duplicate year hitting Season.year's
+  // unique constraint) used to leave every season inactive — picks, teams, sync
+  // and reminders all key off isActive, so the whole league stopped (#159).
+  const existing = await prisma.season.findMany({ select: { year: true } });
+  const check = validateSeasonYear(year, existing.map((s) => s.year));
+  if (!check.ok) {
+    return NextResponse.json({ error: check.error }, { status: 409 });
+  }
 
-  const season = await prisma.season.create({
-    data: {
-      year,
-      isActive: true,
-      weeks: {
-        create: buildSeasonWeeks(year),
+  // Deactivate-then-create in one transaction, so any failure rolls the
+  // deactivate back rather than stranding the league with no active season.
+  const season = await prisma.$transaction(async (tx) => {
+    await tx.season.updateMany({ data: { isActive: false } });
+    return tx.season.create({
+      data: {
+        year,
+        isActive: true,
+        weeks: {
+          create: buildSeasonWeeks(year),
+        },
       },
-    },
-    include: { weeks: true },
+      include: { weeks: true },
+    });
   });
 
   // Roll rosters over from the most-recent prior season (#120) as the editable
@@ -77,6 +87,39 @@ export async function POST(req: NextRequest) {
       });
     }
   }
+
+  return NextResponse.json(season);
+}
+
+/**
+ * Switch which season is active.
+ *
+ * Before this existed, `isActive` was only ever written at creation time, so
+ * the active season was whichever was created last — with no way to correct a
+ * mistake, reactivate a prior season, or recover from a league left with none
+ * active (#159). Everything user-facing keys off `isActive`: picks, teams,
+ * score sync and reminders.
+ */
+export async function PATCH(req: NextRequest) {
+  const session = await requireAdmin();
+  if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const { seasonId } = await req.json();
+  if (typeof seasonId !== "string" || seasonId.length === 0) {
+    return NextResponse.json({ error: "seasonId is required." }, { status: 400 });
+  }
+
+  const target = await prisma.season.findUnique({ where: { id: seasonId }, select: { id: true } });
+  if (!target) {
+    return NextResponse.json({ error: "Season not found." }, { status: 404 });
+  }
+
+  // One transaction, so there is never a moment with zero (or two) active
+  // seasons visible to a concurrent request.
+  const season = await prisma.$transaction(async (tx) => {
+    await tx.season.updateMany({ data: { isActive: false } });
+    return tx.season.update({ where: { id: seasonId }, data: { isActive: true } });
+  });
 
   return NextResponse.json(season);
 }

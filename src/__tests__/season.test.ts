@@ -1,5 +1,42 @@
 import { describe, it, expect } from "vitest";
-import { buildSeasonWeeks } from "@/lib/season";
+import { buildSeasonWeeks, validateSeasonYear } from "@/lib/season";
+
+// #159: the create path deactivates every season before inserting the new one,
+// so a year that fails validation *after* that write leaves the league with no
+// active season and no in-app recovery. These guard the pre-check that stops it.
+describe("validateSeasonYear", () => {
+  it("accepts a plausible new year", () => {
+    expect(validateSeasonYear(2026, [2024, 2025])).toEqual({ ok: true });
+  });
+
+  it("accepts a year when no seasons exist yet", () => {
+    expect(validateSeasonYear(2026)).toEqual({ ok: true });
+  });
+
+  it("rejects a duplicate year, naming it", () => {
+    const result = validateSeasonYear(2025, [2024, 2025]);
+    expect(result.ok).toBe(false);
+    expect(result).toMatchObject({ error: expect.stringContaining("2025") });
+  });
+
+  it("rejects non-integers, including a NaN from a blank number input", () => {
+    for (const bad of [NaN, 2026.5, "2026", null, undefined]) {
+      expect(validateSeasonYear(bad, []).ok).toBe(false);
+    }
+  });
+
+  it("rejects years outside the allowed range", () => {
+    expect(validateSeasonYear(1919, []).ok).toBe(false);
+    expect(validateSeasonYear(2201, []).ok).toBe(false);
+    // A stray millisecond timestamp is the realistic way this happens.
+    expect(validateSeasonYear(Date.now(), []).ok).toBe(false);
+  });
+
+  it("accepts the range boundaries", () => {
+    expect(validateSeasonYear(1920, []).ok).toBe(true);
+    expect(validateSeasonYear(2200, []).ok).toBe(true);
+  });
+});
 
 describe("buildSeasonWeeks", () => {
   const year = 2026;

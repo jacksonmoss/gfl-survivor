@@ -8,6 +8,12 @@ migrations are applied by a one-shot `migrate` service before the app starts.
 > step-by-step runbook for standing up a **new install for a season** (including
 > the non-technical, Admin-panel half a league operator handles), see
 > **[`docs/SEASON-LAUNCH.md`](docs/SEASON-LAUNCH.md)**.
+>
+> To run this same app image **locally for a customer beta** — no domain, no
+> TLS setup, a public HTTPS URL from a Cloudflare quick tunnel — use
+> `docker-compose.beta.yml` and **[`docs/BETA-TESTING.md`](docs/BETA-TESTING.md)**
+> instead. That stack drops nginx, certbot, and the backup sidecar; it is for
+> demos and requirements sign-off, not for running a season.
 
 ## Prerequisites
 
@@ -88,6 +94,12 @@ Notes:
 - The **runner needs no Prisma engine** — the app talks to Postgres via the
   `@prisma/adapter-pg` driver adapter (pure JS).
 - The runner runs as the unprivileged `node` user.
+- The **migrator runs `prisma generate`** at build time. The seed scripts import
+  the generated client from `../src/generated/prisma/client`, which is gitignored
+  and so never present in the build context — without this step `run --rm migrate
+  pnpm seed` fails with `MODULE_NOT_FOUND` and a fresh install can't create its
+  first admin user. It's generated in-stage rather than copied from `builder` so
+  the migrator stays independent of the much slower Next.js build.
 
 ## TLS
 
@@ -259,3 +271,10 @@ response breaks each slot down into `sent` / `skipped` / `failed` counts.
   ~6h stale in nginx; switch to a certbot `--deploy-hook`. (#80)
 - **TLS cert covers only the single `DOMAIN`** — no apex+`www` SAN or canonical
   redirect. (#81)
+- **Nothing exercises this stack in CI** — the images, migrations, and seed path
+  are only ever validated by hand. Two install-breaking bugs (the migrator
+  couldn't run the seed scripts; `ODDS_API_KEY` was never forwarded to the app)
+  shipped undetected because `pnpm test` doesn't touch the Dockerfile or the
+  compose files. (#157)
+- **The shell scripts here aren't linted** — no shellcheck over `deploy/*.sh` or
+  `scripts/*.sh`. (#158)

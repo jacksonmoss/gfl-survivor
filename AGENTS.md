@@ -32,10 +32,14 @@ Prisma v7 has breaking changes from v5/v6:
 - **PrismaClient requires an adapter**: `new PrismaClient({ adapter: new PrismaPg(connectionString) })`
 - **Generated client output** is at `src/generated/prisma/client.ts` — import from `@/generated/prisma/client`
 - **Seed scripts** need `import "dotenv/config"` at top since env vars aren't auto-loaded
+- **`migrate reset` dropped `--skip-generate`** — passing it is a hard error (`unknown or unexpected option`). v7's reset takes only `--force`, `--schema`, `--config`.
+- **The generated client is gitignored**, so any image that runs a seed script must `prisma generate` itself — see the `migrator` stage in `Dockerfile`.
 
 ## Deployment
 
-Production is Docker: `Dockerfile` + `docker-compose.prod.yml` (Postgres + one-shot `migrate` service + app + nginx + backup/certbot/reminders sidecars). Full instructions in `DEPLOYMENT.md`; the non-obvious constraints learned building it are in the **`deployment-notes`** skill.
+Production is Docker: `Dockerfile` + `docker-compose.prod.yml` (Postgres + one-shot `migrate` service + app + nginx + backup/certbot/reminders sidecars). Full instructions in `DEPLOYMENT.md`; the non-obvious constraints learned building it are in the **`deployment-notes`** skill. Standing up a fresh install for a season is `docs/SEASON-LAUNCH.md`.
+
+**Beta / demo** — `docker-compose.beta.yml` + `./scripts/beta.sh up` runs the same production `runner` image locally and fronts it with a Cloudflare quick tunnel, so a remote customer gets an HTTPS URL with no domain, port forwarding, or Cloudflare account. Startup is two-phase (tunnel first, then the app) because `NEXTAUTH_URL` must match the random tunnel hostname before the app boots. `./scripts/beta.sh seed demo|clean` switches between a populated demo league and a clean install. Runbook + a customer requirements sign-off script: `docs/BETA-TESTING.md`. Not for running a real season — quick tunnels are ephemeral.
 
 ## Project Structure
 

@@ -53,6 +53,10 @@ services:
       # reminders endpoint returns 503 and no reminders are sent.
       CRON_SECRET: ${CRON_SECRET:-}
       REMINDER_LEAD_HOURS: ${REMINDER_LEAD_HOURS:-}
+      # Betting spreads on matchup cards (src/lib/odds-sync.ts). Documented in
+      # .env.prod.example but was never passed through to the container, so the
+      # feature silently stayed off in production however the key was set.
+      ODDS_API_KEY: ${ODDS_API_KEY:-}
     depends_on:
       db:
         condition: service_healthy

@@ -62,6 +62,7 @@ export default function AdminPage() {
 
   // Season tab
   const [newYear, setNewYear] = useState(new Date().getFullYear());
+  const [seasonError, setSeasonError] = useState("");
 
   // Import tab
   const [importSeasonId, setImportSeasonId] = useState("");
@@ -213,11 +214,35 @@ export default function AdminPage() {
   // --- Season ---
   async function createSeason() {
     setLoading(true);
-    await fetch("/api/admin/season", {
+    setSeasonError("");
+    // Surface failures instead of silently reloading: a duplicate year now
+    // returns 409, and swallowing it was how a broken season state went
+    // unnoticed (#159).
+    const res = await fetch("/api/admin/season", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ year: newYear }),
     });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setSeasonError(body.error ?? "Could not create that season.");
+    }
+    await loadAll();
+    setLoading(false);
+  }
+
+  async function activateSeason(seasonId: string) {
+    setLoading(true);
+    setSeasonError("");
+    const res = await fetch("/api/admin/season", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ seasonId }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setSeasonError(body.error ?? "Could not activate that season.");
+    }
     await loadAll();
     setLoading(false);
   }
@@ -588,6 +613,13 @@ export default function AdminPage() {
                 Create
               </button>
             </div>
+            {seasonError && (
+              <p className="text-xs text-red-400" role="alert">{seasonError}</p>
+            )}
+            <p className="text-xs text-gray-500">
+              Creating a season makes it the active one. Picks, score sync and reminders
+              all follow the active season — you can switch back below at any time.
+            </p>
           </div>
 
           <div className="space-y-3">
@@ -595,8 +627,16 @@ export default function AdminPage() {
               <div key={season.id} className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-2">
                 <div className="flex items-center gap-2">
                   <span className="font-semibold">{season.year}</span>
-                  {season.isActive && (
+                  {season.isActive ? (
                     <span className="text-xs px-2 py-0.5 rounded-full bg-green-900/50 text-green-400 border border-green-800">Active</span>
+                  ) : (
+                    <button
+                      onClick={() => activateSeason(season.id)}
+                      disabled={loading}
+                      className="text-xs px-2 py-0.5 rounded-full border border-white/15 text-gray-300 hover:bg-white/10 disabled:opacity-50"
+                    >
+                      Make Active
+                    </button>
                   )}
                   <span className="text-xs text-gray-500 ml-auto">{season.weeks.length} weeks</span>
                 </div>

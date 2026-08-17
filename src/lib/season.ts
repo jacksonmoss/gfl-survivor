@@ -2,6 +2,34 @@
 // unit-tested without Prisma and reused by the upcoming season simulator
 // (see src/__tests__/season.test.ts). The route does the Prisma `create`.
 
+export type SeasonYearCheck = { ok: true } | { ok: false; error: string };
+
+/**
+ * Validate a proposed season year before anything is written.
+ *
+ * Exists because the create path deactivates every existing season *before*
+ * inserting the new one: without a pre-check, a duplicate year throws on the
+ * unique constraint after that deactivate has already committed, leaving the
+ * league with no active season and no in-app way back (#159). The route also
+ * wraps the write in a transaction — this gives the caller a clean 409 instead
+ * of a constraint error surfacing as a 500.
+ *
+ * Range is deliberately loose: wide enough for historical backfill and planning
+ * ahead, tight enough to catch a mistyped year (2205) or a stray timestamp.
+ */
+export function validateSeasonYear(year: unknown, existingYears: number[] = []): SeasonYearCheck {
+  if (typeof year !== "number" || !Number.isInteger(year)) {
+    return { ok: false, error: "Year must be a whole number." };
+  }
+  if (year < 1920 || year > 2200) {
+    return { ok: false, error: "Year must be between 1920 and 2200." };
+  }
+  if (existingYears.includes(year)) {
+    return { ok: false, error: `A ${year} season already exists.` };
+  }
+  return { ok: true };
+}
+
 export type SeasonWeek = {
   weekNumber: number;
   label: string;
