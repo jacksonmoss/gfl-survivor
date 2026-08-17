@@ -108,15 +108,35 @@ compose() {
 # ── Tunnel ────────────────────────────────────────────────────────────────────
 
 start_tunnel() {
-  say "starting the Cloudflare quick tunnel"
+  # Reuse a tunnel that's still alive, so redeploying the app doesn't churn the
+  # URL out from under testers who already have the link. "Alive" has to mean
+  # the hostname still resolves, not just that the container is up: Cloudflare
+  # releases quick-tunnel hostnames after a while and cloudflared keeps
+  # retrying against a dead name, staying "Up" the whole time (#155).
+  local current
+  current="$(env_get NEXTAUTH_URL "$RUNTIME_ENV")"
+  if [ -n "$current" ] && [ "$current" != "$(placeholder_url)" ] \
+     && compose ps --status running --services 2>/dev/null | grep -qx cloudflared \
+     && getent hosts "${current#https://}" >/dev/null 2>&1; then
+    say "reusing the live tunnel: $current"
+    return
+  fi
+
+  say "starting a fresh Cloudflare quick tunnel"
+  # --force-recreate so recovery actually mints a new tunnel: `up -d` no-ops on
+  # a running container, which would leave us re-reading the dead hostname.
+  #
   # No --build: cloudflared is a pulled image, and building the app here would
   # delay the tunnel we're about to read the URL from.
-  compose up -d cloudflared
+  compose up -d --force-recreate cloudflared
 
   say "waiting for Cloudflare to assign a hostname"
   local url="" waited=0
   while [ "$waited" -lt 90 ]; do
-    url="$(compose logs --no-color cloudflared 2>&1 | grep -oE "$TUNNEL_HOST_RE" | head -1 || true)"
+    # tail -1, not head -1: cloudflared reprints the banner on every reconnect,
+    # so a long-lived log can hold several hostnames and the oldest is the one
+    # most likely to be dead. Take the most recent.
+    url="$(compose logs --no-color cloudflared 2>&1 | grep -oE "$TUNNEL_HOST_RE" | tail -1 || true)"
     [ -n "$url" ] && break
     sleep 2
     waited=$((waited + 2))
