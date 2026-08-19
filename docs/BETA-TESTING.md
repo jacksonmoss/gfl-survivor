@@ -214,6 +214,17 @@ sim:season`, see the `testing-guide` skill).
 > week that's already been played out is a no-op on its scores — reset it first
 > if you want different results.
 
+### Known gaps (tracked separately)
+
+- **One week at a time** — no way to play several weeks out in a row and show
+  the season developing (standings shifting, streaks, the pick pool shrinking).
+  (#163)
+- **Games jump straight to final** — the live-scoring experience (green dot,
+  scores ticking, teams locking one kickoff at a time) isn't demonstrated.
+  (#164)
+- **Only the picks page says "Demo"** — the leaderboard, stats and admin pages
+  show simulated results with nothing marking them as fabricated. (#165)
+
 ## Other things a beta session can't wait for
 
 Without demo mode, or on a week you'd rather not rewrite:
