@@ -221,7 +221,12 @@ export default function PicksPage() {
         <>
           {/* Demo-mode controls (#161) — renders nothing unless the server has
               DEMO_MODE on, so a real league never sees it. */}
-          <DemoPanel week={selectedWeek} hasPick={!!currentPick} onChange={() => load(true)} />
+          <DemoPanel
+            weeks={season.weeks}
+            selectedWeekId={selectedWeek.id}
+            hasPick={!!currentPick}
+            onChange={() => load(true)}
+          />
 
           {/* Screen-reader announcement for live/final score changes. The string
               only changes when a score or status changes, so polling that returns

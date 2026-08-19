@@ -83,16 +83,45 @@ const LOSING_SCORES = [3, 6, 7, 10, 13, 14, 16, 17, 20];
 const WINNING_SCORES = [17, 20, 21, 23, 24, 27, 28, 31, 34, 38];
 
 /**
+ * How often the betting favourite should win, given the home line.
+ *
+ * Coin-flip winners made every simulated week produce seven or eight "upsets"
+ * out of sixteen games, which quietly made the stats page's upset section
+ * meaningless — an upset that happens half the time isn't one. Favourites win
+ * roughly 55% of pick'em games and up to ~80% when heavily favoured, which is
+ * about right for the NFL, so the customer sees a handful of upsets a week
+ * rather than a coin-flip league.
+ */
+export function favouriteWinChance(spread: number | null): number {
+  const magnitude = Math.min(Math.abs(spread ?? 0), 10);
+  return 0.55 + (magnitude / 10) * 0.25;
+}
+
+/**
  * A fabricated final score. Never a tie: a real tie grades as a PUSH, which is
  * correct behaviour but a confusing thing to hit at random in front of a
- * customer who is trying to understand win/loss. Home wins slightly more often
- * than not, mirroring real home-field advantage.
+ * customer who is trying to understand win/loss.
+ *
+ * `spreadHome` is the home line (negative = home favoured), the same
+ * convention as Game.spreadHome. With no line, home wins slightly more often
+ * than not, mirroring home-field advantage.
  */
-export function simulateScore(rng: () => number): { homeScore: number; awayScore: number } {
+export function simulateScore(
+  rng: () => number,
+  spreadHome: number | null = null,
+): { homeScore: number; awayScore: number } {
   const winning = WINNING_SCORES[Math.floor(rng() * WINNING_SCORES.length)];
   const candidates = LOSING_SCORES.filter((s) => s < winning);
   const losing = candidates[Math.floor(rng() * candidates.length)];
-  const homeWins = rng() < 0.55;
+
+  const roll = rng();
+  const homeWins =
+    spreadHome === null || spreadHome === 0
+      ? roll < 0.55
+      : spreadHome < 0
+      ? roll < favouriteWinChance(spreadHome) // home favoured
+      : roll >= favouriteWinChance(spreadHome); // away favoured
+
   return {
     homeScore: homeWins ? winning : losing,
     awayScore: homeWins ? losing : winning,
@@ -123,6 +152,86 @@ export function gradeDemoPick(
   return pickedHome === homeWon
     ? { result: "WIN", points: pointValue }
     : { result: "LOSS", points: 0 };
+}
+
+export interface DemoWeekPlan {
+  weekId: string;
+  /** Teams with a game this week — the legal pool for that week. */
+  playing: string[];
+  /** Users who already have a pick for this week and must be left alone. */
+  alreadyPicked: string[];
+}
+
+export interface DemoWeekAssignments {
+  weekId: string;
+  assignments: DemoAssignment[];
+}
+
+/**
+ * Plan the random picks for a run of consecutive weeks (#163).
+ *
+ * Doing several weeks at once is where the no-reuse rule gets interesting: a
+ * team handed out in week 1 of the run is spent for weeks 2, 3 and 4 as well,
+ * even though nothing has been written to the database yet. Planning the whole
+ * run up front — accumulating each user's usage as it goes — is what keeps the
+ * finished league in a state the app itself would have allowed.
+ *
+ * Users who already picked a given week keep their pick; their team still
+ * counts as spent for the later weeks in the run.
+ */
+export function planMultiWeekPicks(
+  users: DemoPickee[],
+  weeks: DemoWeekPlan[],
+  rng: () => number,
+): DemoWeekAssignments[] {
+  const used = new Map(users.map((u) => [u.userId, [...u.usedTeams]]));
+
+  return weeks.map((week) => {
+    const skip = new Set(week.alreadyPicked);
+    const pending = users
+      .filter((u) => !skip.has(u.userId))
+      .map((u) => ({ userId: u.userId, usedTeams: used.get(u.userId) ?? [] }));
+
+    const assignments = assignRandomPicks(pending, week.playing, rng);
+    for (const a of assignments) used.get(a.userId)?.push(a.team);
+    return { weekId: week.weekId, assignments };
+  });
+}
+
+// A week of NFL football. Simulated weeks are spaced this far apart, and so are
+// reopened ones, so a multi-week run reads as a season rather than as several
+// slates piled onto the same afternoon.
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+// How far in the past the most recently simulated slate lands. An hour ago
+// (rather than a second ago) reads as "the week is over" everywhere: past
+// kickoffs unlock pick visibility on the leaderboard, and the picks page stops
+// offering to change a locked pick.
+const LAST_KICKOFF_AGO_MS = 60 * 60 * 1000;
+
+// Where a reopened slate's first game lands: far enough out that nothing is
+// locked and the kickoff text looks like a real upcoming week.
+const FIRST_KICKOFF_AHEAD_MS = 2 * 24 * 60 * 60 * 1000;
+
+/**
+ * Where the LAST kickoff of the `index`-th week of a `total`-week run should
+ * land. The final week ends an hour ago and each earlier one a week further
+ * back, so playing four weeks out leaves a month of plausible history behind
+ * it — which is what makes the stats page's streaks and lead changes mean
+ * anything.
+ */
+export function playedWeekAnchor(index: number, total: number, now: Date): Date {
+  const weeksBack = total - 1 - index;
+  return new Date(now.getTime() - LAST_KICKOFF_AGO_MS - weeksBack * WEEK_MS);
+}
+
+/**
+ * Where the FIRST kickoff of the `index`-th reopened week should land: the
+ * first one two days out, each later week a week after that. Keeps a reset run
+ * of weeks in the right order and all of it unstarted.
+ */
+export function reopenedWeekAnchor(index: number, now: Date): Date {
+  return new Date(now.getTime() + FIRST_KICKOFF_AHEAD_MS + index * WEEK_MS);
 }
 
 /**

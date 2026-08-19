@@ -6,34 +6,40 @@ import { useToast } from "@/components/toast";
 
 interface DemoWeek {
   id: string;
+  weekNumber: number;
   label: string;
   games: { status: string }[];
 }
 
 /**
- * Demo-mode controls for the picks page (#161).
+ * Demo-mode controls for the picks page (#161, multi-week in #163).
  *
  * A beta session lasts an hour; a season lasts five months. This is how a
  * customer gets to see the whole loop — make a pick, press one button, watch
  * everyone else's picks land, the games finish, and the leaderboard grade —
- * without waiting for a real Sunday.
+ * without waiting for a real Sunday. Playing several weeks at once is what
+ * makes the season legible: standings move, streaks build, and used teams pile
+ * up.
  *
  * Renders nothing unless the server says DEMO_MODE is on, so it's invisible in
  * a real league even though it ships in the same build. The flag can't be read
  * client-side (see src/lib/demo.ts), hence the fetch on mount.
  */
 export function DemoPanel({
-  week,
+  weeks,
+  selectedWeekId,
   hasPick,
   onChange,
 }: {
-  week: DemoWeek | null;
-  /** Whether the viewer has already picked this week — changes the prompt. */
+  /** Every week of the active season, in order. */
+  weeks: DemoWeek[];
+  selectedWeekId: string | null;
+  /** Whether the viewer has already picked the selected week — changes the prompt. */
   hasPick: boolean;
   onChange: () => void;
 }) {
   const [enabled, setEnabled] = useState(false);
-  const [busy, setBusy] = useState<null | "simulate" | "reset">(null);
+  const [busy, setBusy] = useState<null | string>(null);
   const toast = useToast();
 
   useEffect(() => {
@@ -45,32 +51,57 @@ export function DemoPanel({
     return () => { cancelled = true; };
   }, []);
 
+  const week = weeks.find((w) => w.id === selectedWeekId) ?? null;
   if (!enabled || !week) return null;
 
-  const played = week.games.length > 0 && week.games.every((g) => g.status === "FINAL");
+  const isPlayed = (w: DemoWeek) => w.games.length > 0 && w.games.every((g) => g.status === "FINAL");
+  const played = isPlayed(week);
   // Weeks the schedule hasn't reached yet have nothing to play out. Worth
   // saying rather than 400-ing: after simulating, the picks page auto-advances
   // to the next week on a refresh, which is usually an empty one.
   const empty = week.games.length === 0;
 
-  async function run(action: "simulate" | "reset") {
+  // How many consecutive weeks from here still have a slate — the most a single
+  // run can cover. Stops at the first week with no games, exactly like the API.
+  const runLength = (() => {
+    let n = 0;
+    for (const w of weeks) {
+      if (w.weekNumber < week.weekNumber) continue;
+      if (w.games.length === 0) break;
+      n++;
+    }
+    return n;
+  })();
+
+  const lastOfRun = weeks.find((w) => w.weekNumber === week.weekNumber + runLength - 1);
+  const playedWeeks = weeks.filter(isPlayed).length;
+
+  async function run(action: "simulate" | "reset", body: Record<string, unknown>, key: string) {
     if (!week) return;
-    setBusy(action);
+    setBusy(key);
     try {
       const res = await fetch(`/api/demo/${action}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ weekId: week.id }),
+        body: JSON.stringify({ weekId: week.id, ...body }),
       });
       const data = await res.json();
       if (!res.ok) {
         toast.error(data.error ?? "Demo action failed");
         return;
       }
+      const label =
+        action === "simulate"
+          ? data.weeksPlayed.length === 1
+            ? data.weeksPlayed[0].label
+            : `${data.weeksPlayed.length} weeks`
+          : data.weeksReset.length === 1
+          ? data.weeksReset[0]
+          : `${data.weeksReset.length} weeks`;
       toast.success(
         action === "simulate"
-          ? `${data.week.label} played out — ${data.picksCreated} picks made, ${data.graded} graded`
-          : `${data.week.label} reopened — ${data.picksCleared} picks cleared`,
+          ? `${label} played out — ${data.picksCreated} picks made, ${data.graded} graded`
+          : `${label} reopened — ${data.picksCleared} picks cleared`,
       );
       onChange();
     } catch {
@@ -79,6 +110,9 @@ export function DemoPanel({
       setBusy(null);
     }
   }
+
+  const primary = `rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-medium text-white transition-all hover:bg-amber-500 active:scale-95 disabled:opacity-50 ${focusRing}`;
+  const secondary = `rounded-lg border border-white/15 px-3 py-1.5 text-sm font-medium text-gray-200 transition-all hover:bg-white/10 active:scale-95 disabled:opacity-50 ${focusRing}`;
 
   return (
     <section
@@ -106,24 +140,44 @@ export function DemoPanel({
 
       <div className="flex flex-wrap gap-2">
         <button
-          onClick={() => run("simulate")}
+          onClick={() => run("simulate", { weeks: 1 }, "simulate-1")}
           disabled={busy !== null || empty}
-          className={`rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-medium text-white transition-all hover:bg-amber-500 active:scale-95 disabled:opacity-50 ${focusRing}`}
+          className={primary}
         >
-          {busy === "simulate" ? "Simulating…" : "Simulate week"}
+          {busy === "simulate-1" ? "Simulating…" : "Simulate week"}
         </button>
+        {runLength > 1 && (
+          <button
+            onClick={() => run("simulate", { weeks: runLength }, "simulate-run")}
+            disabled={busy !== null}
+            className={primary}
+          >
+            {busy === "simulate-run" ? "Simulating…" : `Simulate ${runLength} weeks`}
+          </button>
+        )}
         <button
-          onClick={() => run("reset")}
+          onClick={() => run("reset", {}, "reset-1")}
           disabled={busy !== null || empty}
-          className={`rounded-lg border border-white/15 px-3 py-1.5 text-sm font-medium text-gray-200 transition-all hover:bg-white/10 active:scale-95 disabled:opacity-50 ${focusRing}`}
+          className={secondary}
         >
-          {busy === "reset" ? "Resetting…" : "Reset week"}
+          {busy === "reset-1" ? "Resetting…" : "Reset week"}
         </button>
+        {playedWeeks > 1 && (
+          <button
+            onClick={() => run("reset", { all: true }, "reset-all")}
+            disabled={busy !== null}
+            className={secondary}
+          >
+            {busy === "reset-all" ? "Resetting…" : "Reset all weeks"}
+          </button>
+        )}
       </div>
 
       {!empty && (
         <p className="text-[11px] text-amber-100/50">
-          Reset clears everyone&apos;s picks for {week.label} — yours included — and reopens the games.
+          {runLength > 1
+            ? `Simulating ${runLength} weeks plays ${week.label} through ${lastOfRun?.label ?? "the last scheduled week"} out one after another, a week apart, so standings and streaks build up. Reset clears everyone's picks for the week — yours included — and reopens its games.`
+            : `Reset clears everyone's picks for ${week.label} — yours included — and reopens the games.`}
         </p>
       )}
     </section>

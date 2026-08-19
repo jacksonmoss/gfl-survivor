@@ -58,7 +58,7 @@ don't fully control.
 
 ```bash
 ./scripts/beta.sh seed demo     # populated league
-./scripts/beta.sh seed week1    # 2026 week 1, nobody has picked — for the demo simulator
+./scripts/beta.sh seed demo-mode # 2026 weeks 1-4 scheduled, nobody has picked — for the demo simulator
 ./scripts/beta.sh seed clean    # empty league, admin + invite codes only
 ```
 
@@ -91,12 +91,13 @@ odds API key.
 > that is expected, not a bug. To demonstrate real scoring, use `clean` mode
 > below.
 
-### `week1` — for demoing the pick → grade loop
+### `demo-mode` — for demoing the pick → grade loop
 
-The 2026 season, week 1, with a full 16-game slate whose opener is the next
-Thursday — and **no picks at all**. The customer makes the first pick in the
-league, then presses **Simulate week** (see below) and watches the week play
-out. Same players, teams and logins as `demo`.
+The 2026 season with **weeks 1–4 scheduled** — four full 16-game slates, the
+first opening on the next Thursday — and **no picks at all**. The customer
+makes the first pick in the league, then presses **Simulate week** (or
+**Simulate 4 weeks**) and watches it play out. Same players, teams and logins
+as `demo`.
 
 This is the mode to use with `DEMO_MODE` on.
 
@@ -181,7 +182,7 @@ gap: with `DEMO_MODE` on, the picks page grows a **Simulate week** button that
 does everything a real weekend would.
 
 ```bash
-./scripts/beta.sh seed week1     # 2026 week 1, nobody has picked yet
+./scripts/beta.sh seed demo-mode   # 2026 weeks 1-4 scheduled, nobody has picked yet
 ```
 
 `DEMO_MODE` is already on in this stack (`docker-compose.beta.yml` defaults it
@@ -199,15 +200,26 @@ Walk the customer through it:
 | 4 | Look at their own pick | Won or lost, with the points it scored | ☐ |
 | 5 | Open **Leaderboard** | Everyone's picks are now visible (their games have kicked off) and the standings reflect the week | ☐ |
 | 6 | Open **Stats** | Pick distribution, upsets, streaks — all computed from the week just played | ☐ |
-| 7 | Back on **Picks**, press **Reset week** | The week reopens: picks cleared, scores gone, kickoffs back in the future. Run it again as many times as they like | ☐ |
+| 7 | Back on **Picks**, select week 2 and press **Simulate 3 weeks** | Weeks 2–4 play out one after another, a week apart. Nobody is ever handed a team they already used | ☐ |
+| 8 | Open **Stats** again | Now there's a season to look at: standings over time, lead changes week to week, streaks | ☐ |
+| 9 | Switch the week selector across weeks 1–4 | Each week shows its own results; teams used in earlier weeks show **Used** and can't be picked again | ☐ |
+| 10 | Press **Reset all weeks** | Every week reopens: picks cleared, scores gone, kickoffs back in the future, a week apart. Run the whole thing again as many times as they like | ☐ |
 
 What the simulation does *not* fake is the grading: winners and losers are
 decided by the same rules the live grader uses, including playoff point
-escalation and the no-reuse rule (nobody is handed a team they already spent).
-The scores themselves are invented — the games aren't real.
+escalation and the no-reuse rule (nobody is handed a team they already spent,
+in any week of the run). The scores themselves are invented — the games aren't
+real — but the betting line steers who wins, so favourites mostly hold and
+upsets stay the exception, the way they do on a real Sunday.
 
-It covers **one week at a time**, deliberately. It's a demonstration tool, not
-a season simulator; the full-season simulator is a test harness (`pnpm
+A run covers as many consecutive scheduled weeks as you ask for — the panel
+offers the whole scheduled stretch in one button (**Simulate 4 weeks** on a
+fresh `demo-mode` seed). Each week is played out in its own transaction and
+lands a week further back than the next, so what the customer ends up looking
+at reads like a month of football rather than four slates on one afternoon.
+
+It's still a demonstration tool, not a season simulator: the seeded schedule
+stops at week 4, and the full-season simulator is a test harness (`pnpm
 sim:season`, see the `testing-guide` skill).
 
 > Demo mode acts on the week you have selected on the picks page. Simulating a
@@ -216,9 +228,9 @@ sim:season`, see the `testing-guide` skill).
 
 ### Known gaps (tracked separately)
 
-- **One week at a time** — no way to play several weeks out in a row and show
-  the season developing (standings shifting, streaks, the pick pool shrinking).
-  (#163)
+- **The demo schedule stops at week 4** — enough to show a season developing,
+  but the customer can't play through to the playoffs and see point escalation
+  in action. (#163 delivered weeks 1–4.)
 - **Games jump straight to final** — the live-scoring experience (green dot,
   scores ticking, teams locking one kickoff at a time) isn't demonstrated.
   (#164)

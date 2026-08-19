@@ -63,3 +63,41 @@ export async function resolveDemoWeek(weekId?: unknown): Promise<DemoWeekResult>
   if (!week) return { ok: false, status: 404, error: "Week not found." };
   return { ok: true, week };
 }
+
+/**
+ * The run of consecutive weeks a multi-week simulation should cover (#163):
+ * `start`, then the following weeks in the same season, stopping at the first
+ * one with no games. A gap means the schedule hasn't reached that far, and
+ * jumping over it would leave a hole in the middle of the season.
+ */
+export async function collectDemoWeeks(start: DemoWeek, count: number): Promise<DemoWeek[]> {
+  if (start.games.length === 0) return [];
+  const weeks = [start];
+
+  for (let n = 1; n < count; n++) {
+    const next = await prisma.week.findUnique({
+      where: {
+        seasonId_weekNumber: { seasonId: start.seasonId, weekNumber: start.weekNumber + n },
+      },
+      include: { games: { orderBy: { kickoff: "asc" } }, season: true },
+    });
+    if (!next || next.games.length === 0) break;
+    weeks.push(next);
+  }
+
+  return weeks;
+}
+
+/**
+ * Every week of the active season that has a slate, in order — what "Reset
+ * all" acts on, so a multi-week run can be undone in one go rather than a week
+ * at a time.
+ */
+export async function allDemoWeeksWithGames(seasonId: string): Promise<DemoWeek[]> {
+  const weeks = await prisma.week.findMany({
+    where: { seasonId, games: { some: {} } },
+    orderBy: { weekNumber: "asc" },
+    include: { games: { orderBy: { kickoff: "asc" } }, season: true },
+  });
+  return weeks;
+}

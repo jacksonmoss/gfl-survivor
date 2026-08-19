@@ -13,9 +13,9 @@
 # app with that URL. The resolved values land in .env.beta.runtime.
 #
 # Usage:
-#   ./scripts/beta.sh up [--lan] [--seed demo|week1|clean|none]
+#   ./scripts/beta.sh up [--lan] [--seed demo|demo-mode|clean|none]
 #   ./scripts/beta.sh url
-#   ./scripts/beta.sh seed demo|week1|clean
+#   ./scripts/beta.sh seed demo|demo-mode|clean
 #   ./scripts/beta.sh logs [service]
 #   ./scripts/beta.sh ps
 #   ./scripts/beta.sh psql [args...]
@@ -182,8 +182,8 @@ user_count() {
 seed() {
   local mode="${1:-demo}"
   case "$mode" in
-    demo|week1|clean) ;;
-    *) die "unknown seed mode '$mode' (expected 'demo', 'week1' or 'clean')" ;;
+    demo|demo-mode|clean) ;;
+    *) die "unknown seed mode '$mode' (expected 'demo', 'demo-mode' or 'clean')" ;;
   esac
 
   ensure_env_files
@@ -204,9 +204,9 @@ seed() {
       say "seeding the demo league (10 players, 3 teams, 3 graded weeks, week 4 open)"
       compose run --rm migrate pnpm seed:demo
       ;;
-    week1)
-      say "seeding week 1 of 2026, nobody picked yet (for the demo-mode simulator)"
-      compose run --rm migrate pnpm seed:week1
+    demo-mode)
+      say "seeding 2026 weeks 1-4, nobody picked yet (for the demo-mode simulator)"
+      compose run --rm migrate pnpm seed:demo-mode
       ;;
     clean)
       say "seeding a clean install (admin + invite codes only)"
@@ -297,8 +297,8 @@ cmd_up() {
   is a published default and this URL is reachable by anyone who has it.
 
   Demo mode is on: make a pick on the Picks page, then press
-  "Simulate week" to play the whole week out and grade it.
-  Start from an unplayed week 1:  ./scripts/beta.sh seed week1
+  "Simulate week" (or "Simulate 4 weeks") to play football and grade it.
+  Start from an unplayed week 1:  ./scripts/beta.sh seed demo-mode
 
   Walkthrough script for the customer: docs/BETA-TESTING.md
   Logs:  ./scripts/beta.sh logs
