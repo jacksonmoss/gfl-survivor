@@ -17,6 +17,7 @@
     "test:watch": "vitest",
     "seed": "tsx prisma/seed.ts",
     "seed:demo": "tsx prisma/seed-demo.ts",
+    "seed:week1": "tsx prisma/seed-demo-week1.ts",
     "test:e2e": "playwright test",
     "seed:e2e": "tsx prisma/seed-e2e.ts",
     "sim:season": "tsx prisma/sim-season.ts",

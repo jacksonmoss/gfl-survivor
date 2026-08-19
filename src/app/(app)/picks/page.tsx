@@ -10,6 +10,7 @@ import { formatSpread } from "@/lib/odds";
 import { formatKickoff } from "@/lib/datetime";
 import { focusRing, focusRingInset } from "@/lib/ui";
 import { useToast } from "@/components/toast";
+import { DemoPanel } from "@/components/demo-panel";
 
 interface Game {
   id: string;
@@ -218,6 +219,10 @@ export default function PicksPage() {
 
       {selectedWeek && (
         <>
+          {/* Demo-mode controls (#161) — renders nothing unless the server has
+              DEMO_MODE on, so a real league never sees it. */}
+          <DemoPanel week={selectedWeek} hasPick={!!currentPick} onChange={() => load(true)} />
+
           {/* Screen-reader announcement for live/final score changes. The string
               only changes when a score or status changes, so polling that returns
               no change stays silent. */}

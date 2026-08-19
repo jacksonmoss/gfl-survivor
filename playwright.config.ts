@@ -48,6 +48,9 @@ export default defineConfig({
       // The suite logs in on every test from one IP; disable auth rate limiting
       // so it doesn't trip the login limit (see src/proxy.ts, issue #5).
       RATE_LIMIT_DISABLED: "true",
+      // Demo mode (#161) — makes the picks page's simulate/reset controls
+      // exist at all, so zz-demo.spec.ts can drive them.
+      DEMO_MODE: "true",
     },
   },
 });
