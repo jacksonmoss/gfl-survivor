@@ -58,12 +58,13 @@ don't fully control.
 
 ```bash
 ./scripts/beta.sh seed demo     # populated league
+./scripts/beta.sh seed demo-mode # 2026 weeks 1-4 scheduled, nobody has picked — for the demo simulator
 ./scripts/beta.sh seed clean    # empty league, admin + invite codes only
 ```
 
-Both wipe the database first. `up` seeds `demo` automatically the first time,
-and never re-seeds on later runs — so re-running `up` mid-beta can't destroy
-what the customer has entered.
+All three wipe the database first. `up` seeds `demo` automatically the first
+time, and never re-seeds on later runs — so re-running `up` mid-beta can't
+destroy what the customer has entered.
 
 ### `demo` — for usability
 
@@ -89,6 +90,16 @@ odds API key.
 > (`src/lib/score-sync.ts`). So **"Sync Live Scores" does nothing in demo mode** —
 > that is expected, not a bug. To demonstrate real scoring, use `clean` mode
 > below.
+
+### `demo-mode` — for demoing the pick → grade loop
+
+The 2026 season with **weeks 1–4 scheduled** — four full 16-game slates, the
+first opening on the next Thursday — and **no picks at all**. The customer
+makes the first pick in the league, then presses **Simulate week** (or
+**Simulate 4 weeks**) and watches it play out. Same players, teams and logins
+as `demo`.
+
+This is the mode to use with `DEMO_MODE` on.
 
 ### `clean` — for requirements realism
 
@@ -164,9 +175,71 @@ Run this part in **`clean`** mode so they're doing the real thing.
 
 ---
 
-## Simulating things a beta session can't wait for
+## Demo mode: play a whole week in one click
 
-A beta runs for an hour. A season runs for five months. Three shortcuts:
+A beta runs for an hour. A season runs for five months. Demo mode closes that
+gap: with `DEMO_MODE` on, the picks page grows a **Simulate week** button that
+does everything a real weekend would.
+
+```bash
+./scripts/beta.sh seed demo-mode   # 2026 weeks 1-4 scheduled, nobody has picked yet
+```
+
+`DEMO_MODE` is already on in this stack (`docker-compose.beta.yml` defaults it
+to `true`); set `DEMO_MODE=false` in `.env.beta` and restart to hide the
+controls. **It is never set in production** — any signed-in user can press the
+button, and it rewrites the week.
+
+Walk the customer through it:
+
+| # | What to do | What should happen | OK? |
+| --- | --- | --- | --- |
+| 1 | Log in as `admin` (or any player) and open **Picks** | Week 1 is open, with an amber **Demo** panel above the matchups | ☐ |
+| 2 | Pick a team | Their pick appears; nobody else has picked yet | ☐ |
+| 3 | Press **Simulate week** | Everyone else gets a random team, every game finishes, every pick is graded — in a couple of seconds | ☐ |
+| 4 | Look at their own pick | Won or lost, with the points it scored | ☐ |
+| 5 | Open **Leaderboard** | Everyone's picks are now visible (their games have kicked off) and the standings reflect the week | ☐ |
+| 6 | Open **Stats** | Pick distribution, upsets, streaks — all computed from the week just played | ☐ |
+| 7 | Back on **Picks**, select week 2 and press **Simulate 3 weeks** | Weeks 2–4 play out one after another, a week apart. Nobody is ever handed a team they already used | ☐ |
+| 8 | Open **Stats** again | Now there's a season to look at: standings over time, lead changes week to week, streaks | ☐ |
+| 9 | Switch the week selector across weeks 1–4 | Each week shows its own results; teams used in earlier weeks show **Used** and can't be picked again | ☐ |
+| 10 | Press **Reset all weeks** | Every week reopens: picks cleared, scores gone, kickoffs back in the future, a week apart. Run the whole thing again as many times as they like | ☐ |
+
+What the simulation does *not* fake is the grading: winners and losers are
+decided by the same rules the live grader uses, including playoff point
+escalation and the no-reuse rule (nobody is handed a team they already spent,
+in any week of the run). The scores themselves are invented — the games aren't
+real — but the betting line steers who wins, so favourites mostly hold and
+upsets stay the exception, the way they do on a real Sunday.
+
+A run covers as many consecutive scheduled weeks as you ask for — the panel
+offers the whole scheduled stretch in one button (**Simulate 4 weeks** on a
+fresh `demo-mode` seed). Each week is played out in its own transaction and
+lands a week further back than the next, so what the customer ends up looking
+at reads like a month of football rather than four slates on one afternoon.
+
+It's still a demonstration tool, not a season simulator: the seeded schedule
+stops at week 4, and the full-season simulator is a test harness (`pnpm
+sim:season`, see the `testing-guide` skill).
+
+> Demo mode acts on the week you have selected on the picks page. Simulating a
+> week that's already been played out is a no-op on its scores — reset it first
+> if you want different results.
+
+### Known gaps (tracked separately)
+
+- **The demo schedule stops at week 4** — enough to show a season developing,
+  but the customer can't play through to the playoffs and see point escalation
+  in action. (#163 delivered weeks 1–4.)
+- **Games jump straight to final** — the live-scoring experience (green dot,
+  scores ticking, teams locking one kickoff at a time) isn't demonstrated.
+  (#164)
+- **Only the picks page says "Demo"** — the leaderboard, stats and admin pages
+  show simulated results with nothing marking them as fabricated. (#165)
+
+## Other things a beta session can't wait for
+
+Without demo mode, or on a week you'd rather not rewrite:
 
 **Show a team locking at kickoff.** Pull the next game's kickoff into the past
 and refresh the picks page — those two teams flip to "In progress" and become
@@ -189,9 +262,11 @@ fixtures aren't the ones you'd guess.)
 different player: that pick is now visible, while everyone still on an unstarted
 game stays hidden.
 
-**Show grading.** Do this in `clean` mode against the imported real schedule and
-hit **Sync Live Scores** — that runs the actual grader. Don't hand-write scores
-into the demo database to fake it: you'd be demonstrating your SQL, not the app.
+**Show grading against real data.** Demo mode grades with the real rules but
+invented scores. To grade *real* games, use `clean` mode against the imported
+schedule and hit **Sync Live Scores** — that's the ESPN pipeline end to end.
+Either way, don't hand-write scores into the database to fake it: you'd be
+demonstrating your SQL, not the app.
 
 > The SQL above is a presentation shortcut that writes straight to the database
 > and bypasses the app's own logic. Use it to *show* behaviour, never to *verify*

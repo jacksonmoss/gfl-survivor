@@ -16,6 +16,7 @@ A custom NFL survivor pool web app built for Jackson's league. Replaces Splash S
 docker compose up -d          # PostgreSQL on port 5433 (5432 is used by host PG)
 pnpm seed                     # Minimal: admin user + 5 invite codes
 pnpm seed:demo                # Full demo: 10 players, 3 teams, 3 weeks of data, week 4 upcoming
+pnpm seed:demo-mode           # Demo mode: 2026 weeks 1-4 scheduled, nobody has picked yet (#161/#163)
 pnpm dev                      # http://localhost:3000
 ```
 
@@ -39,7 +40,9 @@ Prisma v7 has breaking changes from v5/v6:
 
 Production is Docker: `Dockerfile` + `docker-compose.prod.yml` (Postgres + one-shot `migrate` service + app + nginx + backup/certbot/reminders sidecars). Full instructions in `DEPLOYMENT.md`; the non-obvious constraints learned building it are in the **`deployment-notes`** skill. Standing up a fresh install for a season is `docs/SEASON-LAUNCH.md`.
 
-**Beta / demo** — `docker-compose.beta.yml` + `./scripts/beta.sh up` runs the same production `runner` image locally and fronts it with a Cloudflare quick tunnel, so a remote customer gets an HTTPS URL with no domain, port forwarding, or Cloudflare account. Startup is two-phase (tunnel first, then the app) because `NEXTAUTH_URL` must match the random tunnel hostname before the app boots. `./scripts/beta.sh seed demo|clean` switches between a populated demo league and a clean install. Runbook + a customer requirements sign-off script: `docs/BETA-TESTING.md`. Not for running a real season — quick tunnels are ephemeral.
+**Demo mode** (#161, multi-week #163) — `DEMO_MODE=true` adds **Simulate week** / **Simulate N weeks** / **Reset week** / **Reset all weeks** controls to the picks page: one click fills in random picks for every user without one (never reusing a team they've spent), plays the games out with fabricated scores, and grades every pick with the real rules — so a customer sees the whole pick → lock → grade → leaderboard loop in a beta session instead of over a weekend. A multi-week run plans **all** its random picks up front (`planMultiWeekPicks`) so a team handed out in week 1 is spent for weeks 2-4 too, and lands each week's slate a week further back than the next (`playedWeekAnchor`), so standings, streaks and lead changes build up like a real season. One transaction **per week**, not per run — four weeks of row-by-row updates is too long to hold one open, and a partial run is recoverable with Reset. Fabricated winners are **steered by the betting line** (`favouriteWinChance`, capped at ~80%): coin-flip results made seven or eight of sixteen games an "upset" every week, which quietly made the stats page's upset section meaningless. Reset slides slates back into the future (`reopenedWeekAnchor`), so it's repeatable. Server-side flag on purpose: `NEXT_PUBLIC_*` is inlined at build time and the beta stack runs a prebuilt image, so the client asks `GET /api/demo` instead. On by default in the beta stack, **never set in production** — any signed-in user can press it. Pair with `pnpm seed:demo-mode` (2026 weeks 1-4 scheduled, nobody has picked). Still a presentation tool, not the full-season simulator (`pnpm sim:season`), which is a test harness.
+
+**Beta / demo** — `docker-compose.beta.yml` + `./scripts/beta.sh up` runs the same production `runner` image locally and fronts it with a Cloudflare quick tunnel, so a remote customer gets an HTTPS URL with no domain, port forwarding, or Cloudflare account. Startup is two-phase (tunnel first, then the app) because `NEXTAUTH_URL` must match the random tunnel hostname before the app boots. `./scripts/beta.sh seed demo|demo-mode|clean` switches between a populated demo league, a 2026 league with weeks 1-4 scheduled and no picks (for demo mode), and a clean install. Runbook + a customer requirements sign-off script: `docs/BETA-TESTING.md`. Not for running a real season — quick tunnels are ephemeral.
 
 ## Project Structure
 
@@ -61,6 +64,8 @@ src/
     ├── invites.ts                  # pure invite logic: human-friendly league code gen + checkInviteUsable (single vs multi-use, cap, disable, expiry); register + admin routes delegate (tested)
     ├── rosters.ts                  # pure season-scoped roster logic: rostersLocked (first-kickoff lock), computeRolloverMemberships (new-season copy), buildTeamStandings (season-keyed trophy grouping) — #120 (tested)
     ├── datetime.ts                 # pure formatKickoff — date+time with a timezone label; shared by picks UI + reminder emails (tested)
+    ├── demo.ts                     # pure demo-mode logic: DEMO_MODE gate, random pick assignment (no-reuse safe, single- and multi-week), fabricated scores, grading, kickoff shifting + week anchors — #161/#163 (tested)
+    ├── demo-week.ts                # which week(s) the demo controls act on: resolve one, collect a consecutive run, or every scheduled week (imports prisma; shared by /api/demo/simulate + /reset)
     ├── stats.ts                    # pure stats engine: cumulative standings/ranks, lead changes, pick distribution, upsets (via spread), sweeps, streaks → SeasonStats + WeeklyDigest — #121 (tested)
     └── nfl-teams.ts                # All 32 NFL teams with abbreviations, names, conference, division
 ```
@@ -122,6 +127,7 @@ src/__tests__/
 ├── invites.test.ts         # League code gen + checkInviteUsable (single/multi-use, cap, disable, expiry), normalizeMaxUses — src/lib/invites.ts
 ├── datetime.test.ts        # formatKickoff zone/label output across timezones — src/lib/datetime.ts
 ├── register.test.ts        # deriveProfileNames (#112) + deriveSettingsProfile/splitRealName round-trip (#126) — src/lib/register.ts
+├── demo.test.ts            # Demo mode: DEMO_MODE parsing, random picks honour no-reuse (incl. across a multi-week run), no-tie scores, grading, kickoff shift + week anchors — src/lib/demo.ts (#161/#163)
 ├── stats.test.ts           # Standings/ranks + ties, lead change (incl. first-week null), pick distribution, consensus bust, upsets (no-odds/pick'em/tie skips), sweeps, streaks, season rollup — src/lib/stats.ts (#121)
 └── espn-replay.test.ts     # Replays real 2024 ESPN fixtures through the parser + grader (#109) — see below
 

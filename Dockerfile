@@ -40,6 +40,11 @@ ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc tsconfig.json prisma.config.ts ./
 COPY prisma ./prisma
+# Pure app libs the seed scripts share (season week builder, NFL team list).
+# The project's convention is that logic lives in src/lib and everything else
+# imports it, seeds included — so this image needs them, or `pnpm seed:demo-mode`
+# dies on MODULE_NOT_FOUND the moment it's run in Docker rather than locally.
+COPY src/lib ./src/lib
 # The seed scripts (`pnpm seed`, `pnpm seed:demo`) import the generated client
 # from `../src/generated/prisma/client`, which is gitignored and therefore never
 # in the build context. Generate it here so this image can seed as well as

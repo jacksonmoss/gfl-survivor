@@ -13,9 +13,9 @@
 # app with that URL. The resolved values land in .env.beta.runtime.
 #
 # Usage:
-#   ./scripts/beta.sh up [--lan] [--seed demo|clean|none]
+#   ./scripts/beta.sh up [--lan] [--seed demo|demo-mode|clean|none]
 #   ./scripts/beta.sh url
-#   ./scripts/beta.sh seed demo|clean
+#   ./scripts/beta.sh seed demo|demo-mode|clean
 #   ./scripts/beta.sh logs [service]
 #   ./scripts/beta.sh ps
 #   ./scripts/beta.sh psql [args...]
@@ -182,8 +182,8 @@ user_count() {
 seed() {
   local mode="${1:-demo}"
   case "$mode" in
-    demo|clean) ;;
-    *) die "unknown seed mode '$mode' (expected 'demo' or 'clean')" ;;
+    demo|demo-mode|clean) ;;
+    *) die "unknown seed mode '$mode' (expected 'demo', 'demo-mode' or 'clean')" ;;
   esac
 
   ensure_env_files
@@ -199,13 +199,20 @@ seed() {
   # is throwaway here anyway.
   compose run --rm migrate pnpm prisma migrate reset --force
 
-  if [ "$mode" = "demo" ]; then
-    say "seeding the demo league (10 players, 3 teams, 3 graded weeks, week 4 open)"
-    compose run --rm migrate pnpm seed:demo
-  else
-    say "seeding a clean install (admin + invite codes only)"
-    compose run --rm migrate pnpm seed
-  fi
+  case "$mode" in
+    demo)
+      say "seeding the demo league (10 players, 3 teams, 3 graded weeks, week 4 open)"
+      compose run --rm migrate pnpm seed:demo
+      ;;
+    demo-mode)
+      say "seeding 2026 weeks 1-4, nobody picked yet (for the demo-mode simulator)"
+      compose run --rm migrate pnpm seed:demo-mode
+      ;;
+    clean)
+      say "seeding a clean install (admin + invite codes only)"
+      compose run --rm migrate pnpm seed
+      ;;
+  esac
 
   say "restarting the app"
   compose up -d app
@@ -288,6 +295,10 @@ cmd_up() {
 
   Change the admin password before sharing this URL widely — admin123
   is a published default and this URL is reachable by anyone who has it.
+
+  Demo mode is on: make a pick on the Picks page, then press
+  "Simulate week" (or "Simulate 4 weeks") to play football and grade it.
+  Start from an unplayed week 1:  ./scripts/beta.sh seed demo-mode
 
   Walkthrough script for the customer: docs/BETA-TESTING.md
   Logs:  ./scripts/beta.sh logs

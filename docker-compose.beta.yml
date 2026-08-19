@@ -72,6 +72,12 @@ services:
       REMINDER_LEAD_HOURS: ${REMINDER_LEAD_HOURS:-}
       # Betting spreads on matchup cards. Unset = cards omit the spread.
       ODDS_API_KEY: ${ODDS_API_KEY:-}
+      # Demo mode (#161): adds the "Simulate week" / "Reset week" controls to
+      # the picks page, so a customer can watch a whole week play out and grade
+      # in one sitting. On by default here because that is what this stack is
+      # for; set DEMO_MODE=false in .env.beta to hide it. NEVER set it in
+      # docker-compose.prod.yml — it lets any signed-in user rewrite a week.
+      DEMO_MODE: ${DEMO_MODE:-true}
     depends_on:
       db:
         condition: service_healthy
